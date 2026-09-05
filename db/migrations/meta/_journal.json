@@ -8,6 +8,13 @@
       "when": 1788620961043,
       "tag": "0000_silky_nekra",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788628783649,
+      "tag": "0001_sudden_wrecker",
+      "breakpoints": true
     }
   ]
 }

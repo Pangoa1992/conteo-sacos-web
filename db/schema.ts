@@ -45,6 +45,7 @@ export const usuarios = pgTable("usuarios", {
   id: serial("id").primaryKey(),
   nombre: varchar("nombre", { length: 150 }).notNull(),
   correo: varchar("correo", { length: 150 }).notNull().unique(),
+  passwordHash: varchar("password_hash", { length: 255 }).notNull(),
   rol: varchar("rol", { length: 30 }).notNull().default("cliente"), // admin_macromec | cliente
   creadoEn: timestamp("creado_en").notNull().defaultNow(),
 });
