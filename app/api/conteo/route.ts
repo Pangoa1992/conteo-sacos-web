@@ -64,7 +64,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const [nuevo] = await db.insert(conteos).values(parsed.data).returning();
+  const [nuevo] = await db.insert(conteos).values({
+    cantidadSacos: parsed.data.cantidadSacos,
+    fuenteCamara: parsed.data.fuenteCamara,
+    confianzaPromedio: parsed.data.confianzaPromedio?.toString(),
+  }).returning();
+
   return NextResponse.json(nuevo, { status: 201 });
 }
 
