@@ -6,12 +6,20 @@ Módulo web (backend + frontend) del Sistema de Conteo de Sacos — MACROMEC.
 
 **https://conteo-sacos-web.vercel.app**
 
+Cuentas de prueba:
+- `admin@macromec.com` / `macromec2026` — Personal MACROMEC (ve todo, incluido el módulo de venta)
+- `dueno@fabrica.com` / `fabrica2026` — Dueño de la fábrica (solo ve el conteo y su historial)
+
 ## Estado actual
 
 ✅ **Funcionando en producción**, conectado a una base de datos real (PostgreSQL en Neon):
-- El dashboard (`/`) muestra el conteo más reciente y el historial de registros reales.
-- El endpoint `GET /api/conteo` devuelve datos reales de la base de datos (o datos simulados si `DATABASE_URL` no está configurada, útil para pruebas locales rápidas).
-- El endpoint `POST /api/conteo` es el que usa el módulo de Python (`conteo-sacos-vision`) para enviar resultados de conteo — ya probado end-to-end.
+- Login con autenticación JWT y roles diferenciados (personal MACROMEC vs. dueño de fábrica).
+- Dashboard (`/`) con el conteo más reciente, historial de registros reales, y alertas visuales cuando hay discrepancia entre el conteo automático y el reporte del contratista.
+- Módulo de venta (visible solo para personal MACROMEC): registra ventas a partir de un conteo y calcula el total automáticamente.
+- `GET /api/conteo` — historial de conteos, con el reporte del contratista y si hay discrepancia.
+- `POST /api/conteo` — usado por el módulo de Python (`conteo-sacos-vision`) para enviar resultados; ya probado end-to-end.
+- `GET/POST /api/ventas` — listar y registrar ventas (requiere rol admin_macromec).
+- `POST /api/reportes-contratista` — registra lo que el contratista dice haber armado, para comparar contra el conteo automático.
 
 ⚠️ El **número de sacos** que se muestra todavía es simulado (aleatorio), porque el modelo de detección real (YOLOv8) está pendiente de fotos/video reales de la fábrica para poder entrenarse/adaptarse.
 
@@ -32,7 +40,7 @@ Abrir http://localhost:3000
    npm run db:generate
    npm run db:migrate
 ```
-3. El sistema dejará automáticamente el modo simulado y usará datos reales.
+3. Crear los usuarios de prueba visitando `http://localhost:3000/api/dev/seed-usuarios`.
 
 ## Despliegue
 
@@ -40,8 +48,8 @@ Publicado en **Vercel**, conectado directamente al repositorio de GitHub — cad
 
 ## Pendiente
 
-- [ ] Autenticación JWT (roles: personal MACROMEC vs. dueño de la fábrica)
-- [ ] Validar `VISION_API_TOKEN` en `POST /api/conteo`
+- [ ] Validar `VISION_API_TOKEN` en `POST /api/conteo` (por ahora cualquiera podría enviar conteos falsos)
+- [ ] Reemplazar `/api/dev/seed-usuarios` por un panel real de gestión de usuarios (o eliminarlo) antes de usar el sistema con datos reales
 - [ ] Reemplazar detección simulada por modelo YOLOv8 real (`conteo-sacos-vision`)
-- [ ] Vista del módulo de venta en el dashboard
+- [ ] Chatbot de WhatsApp para consultas remotas (Fase 2 — bloqueado hasta tener acceso a WhatsApp Business API)
 - [ ] Gráficos de tendencia histórica (Fase 3)
