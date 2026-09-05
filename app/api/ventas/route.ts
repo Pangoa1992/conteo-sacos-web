@@ -41,6 +41,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const [nueva] = await db.insert(ventas).values(parsed.data).returning();
+  const [nueva] = await db.insert(ventas).values({
+    conteoId,
+    precioPorSaco: precioPorSaco.toString(),
+  }).returning();
+
   return NextResponse.json(nueva, { status: 201 });
 }
