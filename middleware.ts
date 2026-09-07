@@ -7,9 +7,15 @@ const RUTAS_PUBLICAS = ["/login", "/api/auth/login", "/api/auth/logout", "/api/a
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // El módulo de Python llama a POST /api/conteo sin sesión de navegador;
+    // El módulo de Python llama a POST /api/conteo sin sesión de navegador;
   // su propia seguridad es el VISION_API_TOKEN (pendiente de validar ahí).
-  if (pathname === "/api/conteo" && req.method === "POST") {
+  // Twilio llama a POST /api/whatsapp/webhook igual de forma directa;
+  // su seguridad es la validación de firma (X-Twilio-Signature) dentro
+  // del propio endpoint, no la cookie de sesión.
+  if (
+    (pathname === "/api/conteo" && req.method === "POST") ||
+    pathname === "/api/whatsapp/webhook"
+  ) {
     return NextResponse.next();
   }
 
