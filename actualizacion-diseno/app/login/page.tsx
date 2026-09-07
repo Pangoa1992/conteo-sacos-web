@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -38,7 +39,7 @@ export default function LoginPage() {
   return (
     <main className="login-shell">
       <div className="plant-id">
-        <img src="/logo-macromec.png" alt="MACROMEC" width={32} height={32} className="brand-mark" />
+        <Image src="/logo-macromec.png" alt="MACROMEC" width={32} height={32} className="brand-mark" />
         <span className="name">Conteo de Sacos</span>
       </div>
       <p className="lede">MACROMEC J&S S.A.C. — acceso al panel de planta</p>

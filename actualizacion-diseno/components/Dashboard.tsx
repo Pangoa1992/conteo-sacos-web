@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { VentasModule } from "./VentasModule";
 
 type Conteo = {
@@ -80,7 +81,7 @@ export function Dashboard() {
     <div className="shell">
       <div className="topbar">
         <div className="plant-id">
-          <img src="/logo-macromec.png" alt="MACROMEC" width={32} height={32} className="brand-mark" />
+          <Image src="/logo-macromec.png" alt="MACROMEC" width={32} height={32} className="brand-mark" />
           <div>
             <div className="name">Conteo de Sacos</div>
             <div className="sub">MACROMEC J&S S.A.C. · Lavadero de zanahorias</div>
