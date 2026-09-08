@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { VentasModule } from "./VentasModule";
+import { ReporteContratistaModule } from "./ReporteContratistaModule";
 
 type Conteo = {
   id: number;
@@ -80,7 +82,7 @@ export function Dashboard() {
     <div className="shell">
       <div className="topbar">
         <div className="plant-id">
-          <img src="/logo-macromec.png" alt="MACROMEC" width={32} height={32} className="brand-mark" />
+          <Image src="/logo-macromec.png" alt="MACROMEC" width={32} height={32} className="brand-mark" />
           <div>
             <div className="name">Conteo de Sacos</div>
             <div className="sub">MACROMEC J&S S.A.C. · Lavadero de zanahorias</div>
@@ -167,7 +169,12 @@ export function Dashboard() {
         </tbody>
       </table>
 
-      {usuario?.rol === "admin_macromec" && <VentasModule ultimoConteoId={ultimo?.id} />}
+      {usuario?.rol === "admin_macromec" && (
+        <>
+          <ReporteContratistaModule ultimoConteoId={ultimo?.id} onRegistrado={cargar} />
+          <VentasModule ultimoConteoId={ultimo?.id} />
+        </>
+      )}
     </div>
   );
 }
