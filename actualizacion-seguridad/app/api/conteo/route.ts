@@ -39,6 +39,8 @@ export async function GET() {
     .orderBy(desc(conteos.creadoEn))
     .limit(20);
 
+  // Para cada conteo, busca si el contratista reportó una cantidad y
+  // calcula si hay discrepancia frente al conteo automático.
   const conteosConAlerta = await Promise.all(
     ultimos.map(async (c) => {
       const [reporte] = await db
@@ -98,6 +100,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (!process.env.DATABASE_URL) {
+    // Modo simulado: no hay BD configurada todavía, solo confirmamos recepción.
     return NextResponse.json(
       { modoSimulado: true, recibido: parsed.data },
       { status: 201 }
