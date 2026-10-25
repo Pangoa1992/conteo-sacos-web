@@ -1,0 +1,40 @@
+# PostgreSQL local de desarrollo para MACROMEC J&S S.A.C.
+#
+# Uso (desde esta carpeta):
+#   docker compose --env-file .env.local up -d
+#
+# - Puerto 5433 en el host (el 5432 lo usa otro proyecto).
+# - Solo escucha en 127.0.0.1 (no expuesto a la red local).
+# - Volumen y red propios: no comparte nada con otros proyectos.
+# - La contraseña se lee de MACROMEC_DB_PASSWORD en .env.local (no versionado).
+
+name: macromec
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: macromec-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: macromec
+      POSTGRES_DB: conteo_sacos
+      POSTGRES_PASSWORD: ${MACROMEC_DB_PASSWORD:?Define MACROMEC_DB_PASSWORD en .env.local}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - macromec_pgdata:/var/lib/postgresql/data
+    networks:
+      - macromec_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U macromec -d conteo_sacos"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  macromec_pgdata:
+    name: macromec_pgdata
+
+networks:
+  macromec_net:
+    name: macromec_net

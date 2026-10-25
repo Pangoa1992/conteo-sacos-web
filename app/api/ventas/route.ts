@@ -4,11 +4,15 @@ import { ventas, conteos } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { verificarToken, NOMBRE_COOKIE_SESION } from "@/lib/auth";
+import { esOrigenPrueba } from "@/lib/conteos";
 
 const ventaInputSchema = z.object({
   conteoId: z.number().int(),
-  precioPorSaco: z.number().positive(),
+  precioPorSaco: z.number().positive().max(99_999_999.99),
 });
+
+// Máximo representable en numeric(10, 2) (columnas precio_por_saco y total_venta).
+const MAXIMO_NUMERIC_10_2 = 99_999_999.99;
 
 /**
  * GET /api/ventas
@@ -19,7 +23,10 @@ export async function GET(req: NextRequest) {
   const token = req.cookies.get(NOMBRE_COOKIE_SESION)?.value;
   const usuario = token ? await verificarToken(token) : null;
 
-  if (!usuario || usuario.rol !== "admin_macromec") {
+  if (!usuario) {
+    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  }
+  if (usuario.rol !== "admin_macromec") {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }
 
@@ -36,13 +43,17 @@ export async function GET(req: NextRequest) {
       confirmada: ventas.confirmada,
       creadoEn: ventas.creadoEn,
       cantidadSacos: conteos.cantidadSacos,
+      origenConteo: conteos.origen,
     })
     .from(ventas)
     .leftJoin(conteos, eq(ventas.conteoId, conteos.id))
     .orderBy(desc(ventas.creadoEn))
     .limit(50);
 
-  return NextResponse.json({ modoSimulado: false, ventas: lista });
+  return NextResponse.json({
+    modoSimulado: false,
+    ventas: lista.map(({ origenConteo, ...v }) => ({ ...v, esPrueba: esOrigenPrueba(origenConteo) })),
+  });
 }
 
 /**
@@ -55,11 +66,14 @@ export async function POST(req: NextRequest) {
   const token = req.cookies.get(NOMBRE_COOKIE_SESION)?.value;
   const usuario = token ? await verificarToken(token) : null;
 
-  if (!usuario || usuario.rol !== "admin_macromec") {
+  if (!usuario) {
+    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  }
+  if (usuario.rol !== "admin_macromec") {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }
 
-  const body = await req.json();
+  const body = await req.json().catch(() => null);
   const parsed = ventaInputSchema.safeParse(body);
 
   if (!parsed.success) {
@@ -87,6 +101,9 @@ export async function POST(req: NextRequest) {
   }
 
   const totalVenta = precioPorSaco * conteo.cantidadSacos;
+  if (totalVenta > MAXIMO_NUMERIC_10_2) {
+    return NextResponse.json({ error: "El total de la venta excede el máximo permitido" }, { status: 400 });
+  }
 
   const [nueva] = await db.insert(ventas).values({
     conteoId,

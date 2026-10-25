@@ -1,15 +1,20 @@
 import { pgTable, serial, integer, varchar, timestamp, boolean, numeric } from "drizzle-orm/pg-core";
 
 /**
- * Cada registro representa un conteo enviado por el módulo de visión
- * computarizada (Python) al finalizar el procesamiento de un lote/poza.
+ * Cada registro representa un lote de producción terminado, enviado por el
+ * módulo de visión computarizada (Python) al finalizar su procesamiento.
  */
 export const conteos = pgTable("conteos", {
   id: serial("id").primaryKey(),
   cantidadSacos: integer("cantidad_sacos").notNull(),
-  origen: varchar("origen", { length: 50 }).notNull().default("vision_ip"), // vision_ip | manual
+  origen: varchar("origen", { length: 50 }).notNull().default("vision_ip"), // vision_ip | prueba_vision | manual
   fuenteCamara: varchar("fuente_camara", { length: 100 }), // identificador de la cámara IP
   confianzaPromedio: numeric("confianza_promedio", { precision: 5, scale: 2 }), // % de confianza del modelo
+  // Identificador del lote generado por el detector; UNIQUE garantiza en
+  // PostgreSQL que un reintento no duplique el conteo. NULL en registros antiguos.
+  idExterno: varchar("id_externo", { length: 64 }).unique(),
+  // Fecha real del conteo en el detector (UTC). creadoEn es la fecha de recepción.
+  contadoEn: timestamp("contado_en"),
   creadoEn: timestamp("creado_en").notNull().defaultNow(),
 });
 

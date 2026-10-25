@@ -15,6 +15,13 @@
       "when": 1788628783649,
       "tag": "0001_sudden_wrecker",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792937285725,
+      "tag": "0002_fase4_idempotencia",
+      "breakpoints": true
     }
   ]
 }

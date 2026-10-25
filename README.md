@@ -6,9 +6,9 @@ Módulo web (backend + frontend) del Sistema de Conteo de Sacos — MACROMEC.
 
 **https://conteo-sacos-web.vercel.app**
 
-Cuentas de prueba:
-- `admin@macromec.com` / `macromec2026` — Personal MACROMEC (ve todo, incluido el módulo de venta)
-- `dueno@fabrica.com` / `fabrica2026` — Dueño de la fábrica (solo ve el conteo y su historial)
+Las credenciales de acceso se entregan de forma privada (no se publican en el repositorio).
+Roles: `admin_macromec` (personal MACROMEC: ve todo, incluido contratistas y ventas) y
+`cliente` (dueño de la fábrica: solo ve el conteo y su historial).
 
 ## Estado actual
 
@@ -34,13 +34,19 @@ Abrir http://localhost:3000
 
 ## Configurar base de datos (PostgreSQL)
 
-1. Copiar `.env.example` a `.env.local` y completar `DATABASE_URL` (usamos Neon, gratis).
-2. Generar y aplicar las migraciones:
+1. Copiar `.env.example` a `.env.local` y completar todas las variables obligatorias
+   (`DATABASE_URL`, `JWT_SECRET`, `VISION_API_TOKEN`; `TWILIO_AUTH_TOKEN` para WhatsApp).
+   Para desarrollo local se puede levantar PostgreSQL en el puerto 5433 con
+   `docker compose --env-file .env.local up -d` (ver `docker-compose.yml`).
+2. Aplicar las migraciones (`drizzle-kit` no lee `.env.local`, hay que exportar `DATABASE_URL`):
 ```bash
-   npm run db:generate
    npm run db:migrate
 ```
-3. Crear los usuarios de prueba visitando `http://localhost:3000/api/dev/seed-usuarios`.
+3. Crear los usuarios de desarrollo (definidos en `DEV_*_CORREO` / `DEV_*_PASSWORD`),
+   solo en local:
+```bash
+   curl -X POST http://localhost:3000/api/dev/seed-usuarios -H "X-Dev-Seed-Secret: $DEV_SEED_SECRET"
+```
 
 ## Despliegue
 
@@ -48,7 +54,7 @@ Publicado en **Vercel**, conectado directamente al repositorio de GitHub — cad
 
 ## Pendiente
 
-- [ ] Validar `VISION_API_TOKEN` en `POST /api/conteo` (por ahora cualquiera podría enviar conteos falsos)
+- [x] Validar `VISION_API_TOKEN` en `POST /api/conteo` (obligatorio; sin él responde 503)
 - [ ] Reemplazar `/api/dev/seed-usuarios` por un panel real de gestión de usuarios (o eliminarlo) antes de usar el sistema con datos reales
 - [ ] Reemplazar detección simulada por modelo YOLOv8 real (`conteo-sacos-vision`)
 - [ ] Chatbot de WhatsApp para consultas remotas (Fase 2 — bloqueado hasta tener acceso a WhatsApp Business API)
