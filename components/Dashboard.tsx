@@ -4,16 +4,25 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { VentasModule } from "./VentasModule";
 import { ReporteContratistaModule } from "./ReporteContratistaModule";
+import { GraficoProduccion, etiquetaDia, type DiaProduccion } from "./GraficoProduccion";
 
-type Conteo = {
+export type Conteo = {
   id: number;
   cantidadSacos: number;
+  origen?: string | null;
+  esPrueba?: boolean;
   fuenteCamara?: string | null;
   confianzaPromedio?: number | string | null;
-  creadoEn: string;
+  creadoEn: string; // recepción en la web
+  contadoEn?: string | null; // fecha real del lote en el detector
+  fechaConteo?: string; // contadoEn o, si no existe, creadoEn
   reporteContratista?: { cantidadReportada: number; nombreContratista?: string | null } | null;
   discrepancia?: boolean;
 };
+
+type FilaDiaria = { fecha: string; esPrueba: boolean; totalSacos: number; registros: number };
+type Fuente = { fuenteCamara: string | null; esPrueba: boolean; ultimoRegistro: string; registros: number };
+type Resumen = { hoy: string | null; diasSerie?: number; diario: FilaDiaria[]; fuentes: Fuente[] };
 
 type Usuario = {
   id: number;
@@ -22,6 +31,14 @@ type Usuario = {
   rol: "admin_macromec" | "cliente";
 };
 
+/** Qué datos se muestran: los de prueba nunca se mezclan con los reales salvo en "todos". */
+type Vista = "real" | "prueba" | "todos";
+
+const LIMITE_HISTORIAL = 200;
+const INTERVALO_ACTUALIZACION_MS = 10_000;
+
+const fmt = (n: number) => n.toLocaleString("es-PE");
+
 function tiempoRelativo(fechaISO: string): string {
   const diffMs = Date.now() - new Date(fechaISO).getTime();
   const min = Math.floor(diffMs / 60000);
@@ -29,61 +46,54 @@ function tiempoRelativo(fechaISO: string): string {
   if (min < 60) return `hace ${min} min`;
   const h = Math.floor(min / 60);
   if (h < 24) return `hace ${h} h`;
-  return new Date(fechaISO).toLocaleDateString("es-PE");
+  const d = Math.floor(h / 24);
+  return d === 1 ? "hace 1 día" : `hace ${d} días`;
 }
 
-function fechaCorta(fechaISO: string): string {
-  return new Date(fechaISO).toLocaleDateString("es-PE", { day: "2-digit", month: "2-digit" });
+/** Fecha real del lote; los registros antiguos sin ella usan la de recepción. */
+function fechaDe(c: Conteo): string {
+  return c.fechaConteo ?? c.contadoEn ?? c.creadoEn;
 }
 
-// ---------- Mini gráfico de tendencia (SVG, sin dependencias) ----------
-function GraficoTendencia({ datos }: { datos: Conteo[] }) {
-  if (datos.length < 2) {
-    return <p className="chart-empty">Se necesitan al menos 2 registros para mostrar la tendencia.</p>;
-  }
-  const ordenado = [...datos].reverse(); // cronológico
-  const valores = ordenado.map((c) => c.cantidadSacos);
-  const max = Math.max(...valores, 1);
-  const min = Math.min(...valores, 0);
-  const rango = max - min || 1;
-  const W = 640;
-  const H = 160;
-  const pad = 24;
+/** Confianza tal como llegó del modelo; null si no se reportó (nunca se inventa). */
+function confianzaNumerica(v: Conteo["confianzaPromedio"]): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
 
-  const puntos = ordenado.map((c, i) => {
-    const x = pad + (i / (ordenado.length - 1)) * (W - pad * 2);
-    const y = H - pad - ((c.cantidadSacos - min) / rango) * (H - pad * 2);
-    return { x, y, c };
-  });
+function formatoConfianza(v: Conteo["confianzaPromedio"]): string {
+  const n = confianzaNumerica(v);
+  return n === null ? "No disponible" : `${n.toLocaleString("es-PE", { maximumFractionDigits: 1 })} %`;
+}
 
-  const linea = puntos.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
-  const area = `${linea} L ${puntos[puntos.length - 1].x.toFixed(1)} ${H - pad} L ${puntos[0].x.toFixed(1)} ${H - pad} Z`;
+/** Suma n días a una fecha YYYY-MM-DD (sin depender de la zona del navegador). */
+function sumarDias(fecha: string, n: number): string {
+  const d = new Date(`${fecha}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
 
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="trend-svg" preserveAspectRatio="xMidYMid meet">
-      <line x1={pad} y1={H - pad} x2={W - pad} y2={H - pad} className="trend-axis" />
-      <path d={area} className="trend-area" />
-      <path d={linea} className="trend-line" />
-      {puntos.map((p, i) => (
-        <g key={i}>
-          <circle cx={p.x} cy={p.y} r={p.c.discrepancia ? 5 : 3.2} className={p.c.discrepancia ? "trend-dot-flag" : "trend-dot"} />
-          <title>{`${fechaCorta(p.c.creadoEn)} — ${p.c.cantidadSacos} sacos`}</title>
-        </g>
-      ))}
-    </svg>
-  );
+function EtiquetaPrueba() {
+  return <span className="badge badge-prueba" title="Dato de prueba: no es una detección real">Prueba</span>;
 }
 
 export function Dashboard() {
   const router = useRouter();
   const [conteos, setConteos] = useState<Conteo[]>([]);
-  const [modoSimulado, setModoSimulado] = useState(true);
+  const [resumen, setResumen] = useState<Resumen | null>(null);
+  const [modoSimulado, setModoSimulado] = useState(false);
   const [cargando, setCargando] = useState(true);
+  const [errorCarga, setErrorCarga] = useState(false);
+  const [actualizadoEn, setActualizadoEn] = useState<Date | null>(null);
   const [usuario, setUsuario] = useState<Usuario | null>(null);
-  const [tema, setTema] = useState<"oscuro" | "claro">("oscuro");
+  const [tema, setTema] = useState<"claro" | "oscuro">("claro");
+  const [vista, setVista] = useState<Vista>("real");
+  const [menuAbierto, setMenuAbierto] = useState(false);
   const [filaExpandida, setFilaExpandida] = useState<number | null>(null);
+  const [seccionActiva, setSeccionActiva] = useState("resumen");
 
-  // Filtros
+  // Filtros del historial
   const [filtroCamara, setFiltroCamara] = useState("");
   const [filtroDesde, setFiltroDesde] = useState("");
   const [filtroHasta, setFiltroHasta] = useState("");
@@ -91,10 +101,20 @@ export function Dashboard() {
 
   async function cargar() {
     try {
-      const res = await fetch("/api/conteo", { cache: "no-store" });
-      const data = await res.json();
-      setConteos(data.conteos ?? []);
-      setModoSimulado(data.modoSimulado ?? true);
+      const [resConteos, resResumen] = await Promise.all([
+        fetch(`/api/conteo?limite=${LIMITE_HISTORIAL}`, { cache: "no-store" }),
+        fetch("/api/conteo/resumen", { cache: "no-store" }),
+      ]);
+      if (!resConteos.ok || !resResumen.ok) throw new Error("respuesta no válida");
+      const dataConteos = await resConteos.json();
+      const dataResumen = await resResumen.json();
+      setConteos(dataConteos.conteos ?? []);
+      setModoSimulado(!!dataConteos.modoSimulado);
+      setResumen(dataResumen);
+      setErrorCarga(false);
+      setActualizadoEn(new Date());
+    } catch {
+      setErrorCarga(true); // se conservan los últimos datos mostrados
     } finally {
       setCargando(false);
     }
@@ -115,12 +135,12 @@ export function Dashboard() {
   useEffect(() => {
     cargar();
     cargarUsuario();
-    const interval = setInterval(cargar, 10000);
+    const interval = setInterval(cargar, INTERVALO_ACTUALIZACION_MS);
     return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
-    const guardado = typeof window !== "undefined" ? window.localStorage?.getItem("tema-conteo") : null;
+    const guardado = typeof window !== "undefined" ? window.localStorage?.getItem("tema-dashboard") : null;
     if (guardado === "claro" || guardado === "oscuro") setTema(guardado);
   }, []);
 
@@ -128,66 +148,87 @@ export function Dashboard() {
     const nuevo = tema === "oscuro" ? "claro" : "oscuro";
     setTema(nuevo);
     try {
-      window.localStorage?.setItem("tema-conteo", nuevo);
+      window.localStorage?.setItem("tema-dashboard", nuevo);
     } catch {}
   }
 
-  const ultimo = conteos[0];
+  // En modo simulado (sin BD) todo se trata como dato de prueba.
+  const esPrueba = (c: { esPrueba?: boolean }) => modoSimulado || !!c.esPrueba;
+  const enVista = (prueba: boolean) => vista === "todos" || (vista === "prueba") === prueba;
 
+  const conteosVista = useMemo(() => conteos.filter((c) => enVista(esPrueba(c))), [conteos, vista, modoSimulado]);
+  const ultimo = conteosVista[0];
+  const hayReales = conteos.some((c) => !esPrueba(c));
+  const cantidadPrueba = conteos.filter((c) => esPrueba(c)).length;
+
+  // ---- Producción diaria (desde /api/conteo/resumen, agregada en la BD) ----
+  const hoy = resumen?.hoy ?? null;
+  const diasSerie = resumen?.diasSerie ?? 14;
+  const dias: DiaProduccion[] = useMemo(() => {
+    if (!hoy) return [];
+    const porFecha = new Map<string, DiaProduccion>();
+    for (let i = diasSerie - 1; i >= 0; i--) {
+      const fecha = sumarDias(hoy, -i);
+      porFecha.set(fecha, { fecha, totalSacos: 0, registros: 0 });
+    }
+    for (const fila of resumen?.diario ?? []) {
+      const dia = porFecha.get(fila.fecha);
+      if (dia && enVista(fila.esPrueba)) {
+        dia.totalSacos += fila.totalSacos;
+        dia.registros += fila.registros;
+      }
+    }
+    return [...porFecha.values()];
+  }, [resumen, hoy, diasSerie, vista]);
+
+  const produccionHoy = dias.find((d) => d.fecha === hoy);
+  const ultimos7 = dias.slice(-7).reduce((s, d) => s + d.totalSacos, 0);
+  const previos7 = dias.slice(-14, -7).reduce((s, d) => s + d.totalSacos, 0);
+  const tendencia = previos7 > 0 ? Math.round(((ultimos7 - previos7) / previos7) * 100) : null;
+
+  // ---- Confianza: solo valores reportados por el modelo ----
+  const confianzas = conteosVista.map((c) => confianzaNumerica(c.confianzaPromedio)).filter((n): n is number => n !== null);
+  const confianzaMedia = confianzas.length ? confianzas.reduce((s, n) => s + n, 0) / confianzas.length : null;
+
+  const discrepanciasVista = conteosVista.filter((c) => c.discrepancia).length;
+  const fuentesVista = (resumen?.fuentes ?? []).filter((f) => enVista(f.esPrueba));
+
+  // ---- Historial con filtros ----
   const conteosFiltrados = useMemo(() => {
-    return conteos.filter((c) => {
+    return conteosVista.filter((c) => {
       if (soloDiscrepancias && !c.discrepancia) return false;
       if (filtroCamara && !(c.fuenteCamara ?? "").toLowerCase().includes(filtroCamara.toLowerCase())) return false;
-      const fecha = new Date(c.creadoEn);
-      if (filtroDesde && fecha < new Date(filtroDesde)) return false;
-      if (filtroHasta) {
-        const hasta = new Date(filtroHasta);
-        hasta.setHours(23, 59, 59, 999);
-        if (fecha > hasta) return false;
-      }
+      const fecha = new Date(fechaDe(c));
+      if (filtroDesde && fecha < new Date(`${filtroDesde}T00:00:00`)) return false;
+      if (filtroHasta && fecha > new Date(`${filtroHasta}T23:59:59.999`)) return false;
       return true;
     });
-  }, [conteos, filtroCamara, filtroDesde, filtroHasta, soloDiscrepancias]);
+  }, [conteosVista, filtroCamara, filtroDesde, filtroHasta, soloDiscrepancias]);
 
-  const hayDiscrepancias = conteosFiltrados.some((c) => c.discrepancia);
-  const totalHoy = conteosFiltrados.reduce((sum, c) => sum + c.cantidadSacos, 0);
-  const confianzaProm =
-    conteosFiltrados.length > 0
-      ? Math.round(conteosFiltrados.reduce((s, c) => s + Number(c.confianzaPromedio || 0), 0) / conteosFiltrados.length)
-      : 0;
-
-  // Tendencia: compara la mitad más reciente vs la mitad anterior
-  const tendencia = useMemo(() => {
-    if (conteosFiltrados.length < 4) return null;
-    const mitad = Math.floor(conteosFiltrados.length / 2);
-    const reciente = conteosFiltrados.slice(0, mitad);
-    const anterior = conteosFiltrados.slice(mitad, mitad * 2);
-    const promReciente = reciente.reduce((s, c) => s + c.cantidadSacos, 0) / reciente.length;
-    const promAnterior = anterior.reduce((s, c) => s + c.cantidadSacos, 0) / anterior.length;
-    if (promAnterior === 0) return null;
-    const cambio = ((promReciente - promAnterior) / promAnterior) * 100;
-    return Math.round(cambio);
-  }, [conteosFiltrados]);
+  const totalFiltrado = conteosFiltrados.reduce((sum, c) => sum + c.cantidadSacos, 0);
+  const hayDiscrepanciasFiltradas = conteosFiltrados.some((c) => c.discrepancia);
 
   function exportarCSV() {
-    const encabezado = ["Fecha", "Hora", "Sacos", "Camara/Origen", "Confianza", "Contratista reporto", "Discrepancia"];
+    const encabezado = ["ID", "Fecha", "Hora", "Sacos", "Tipo", "Camara/Origen", "Confianza (%)", "Contratista reporto", "Discrepancia"];
     const filas = conteosFiltrados.map((c) => [
-      new Date(c.creadoEn).toLocaleDateString("es-PE"),
-      new Date(c.creadoEn).toLocaleTimeString("es-PE"),
+      c.id,
+      new Date(fechaDe(c)).toLocaleDateString("es-PE"),
+      new Date(fechaDe(c)).toLocaleTimeString("es-PE"),
       c.cantidadSacos,
+      esPrueba(c) ? "PRUEBA" : "Real",
       c.fuenteCamara ?? "",
-      c.confianzaPromedio ?? "",
+      confianzaNumerica(c.confianzaPromedio) ?? "",
       c.reporteContratista?.cantidadReportada ?? "",
       c.discrepancia ? "Si" : "No",
     ]);
     const csv = [encabezado, ...filas]
       .map((fila) => fila.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
       .join("\n");
-    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `conteo-sacos-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `conteo-sacos-${vista}-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -200,200 +241,430 @@ export function Dashboard() {
   }
 
   const hayFiltrosActivos = !!(filtroCamara || filtroDesde || filtroHasta || soloDiscrepancias);
+  const esAdmin = usuario?.rol === "admin_macromec";
+  const conteoParaModulos = ultimo
+    ? { id: ultimo.id, cantidadSacos: ultimo.cantidadSacos, creadoEn: fechaDe(ultimo), esPrueba: esPrueba(ultimo) }
+    : undefined;
+
+  const secciones = [
+    { id: "resumen", texto: "Resumen" },
+    { id: "produccion", texto: "Producción diaria" },
+    { id: "camaras", texto: "Cámaras" },
+    { id: "historial", texto: "Historial" },
+    ...(esAdmin ? [{ id: "contratistas", texto: "Contratistas" }, { id: "ventas", texto: "Ventas" }] : []),
+  ];
+
+  // Sección activa del menú: la última cuyo inicio ya pasó el primer tercio de la pantalla.
+  // Se recalcula al cambiar las secciones (las de admin aparecen al cargar el usuario).
+  const idsSecciones = secciones.map((s) => s.id).join(",");
+  useEffect(() => {
+    const ids = idsSecciones.split(",");
+    let cuadro = 0;
+    function actualizar() {
+      cuadro = 0;
+      const umbral = window.innerHeight / 3;
+      let actual = ids[0];
+      for (const id of ids) {
+        const el = document.getElementById(id);
+        if (el && el.getBoundingClientRect().top <= umbral) actual = id;
+      }
+      // Al final de la página la última sección puede no alcanzar el umbral.
+      const alFinal = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+      if (alFinal && window.scrollY > 0) actual = ids[ids.length - 1];
+      setSeccionActiva(actual);
+    }
+    const programar = () => { if (!cuadro) cuadro = requestAnimationFrame(actualizar); };
+    actualizar();
+    window.addEventListener("scroll", programar, { passive: true });
+    window.addEventListener("resize", programar);
+    return () => {
+      window.removeEventListener("scroll", programar);
+      window.removeEventListener("resize", programar);
+      cancelAnimationFrame(cuadro);
+    };
+  }, [idsSecciones]);
+
+  const etiquetaVista = { real: "Datos reales", prueba: "Datos de prueba", todos: "Todos los datos" }[vista];
 
   return (
-    <div className="shell" data-theme={tema}>
-      <div className="topbar">
-        <div className="plant-id">
-          <img src="/logo-macromec.png" alt="MACROMEC" width={32} height={32} className="brand-mark" />
+    <div className="app" data-theme={tema}>
+      {/* ================= Barra lateral ================= */}
+      <aside className="sidebar">
+        <div className="sidebar-marca">
+          <img src="/logo-macromec.png" alt="" width={40} height={40} className="sidebar-logo" />
           <div>
-            <div className="name">Conteo de Sacos</div>
-            <div className="sub">MACROMEC J&S S.A.C. · Lavadero de zanahorias</div>
+            <div className="sidebar-nombre">MACROMEC</div>
+            <div className="sidebar-sub">J&amp;S S.A.C. · Conteo de sacos</div>
+          </div>
+          <button
+            type="button"
+            className="sidebar-menu-btn"
+            aria-expanded={menuAbierto}
+            aria-controls="nav-principal"
+            onClick={() => setMenuAbierto((v) => !v)}
+          >
+            {menuAbierto ? "Cerrar" : "Menú"}
+          </button>
+        </div>
+
+        <div className={`sidebar-cuerpo ${menuAbierto ? "abierto" : ""}`}>
+          <nav id="nav-principal" className="sidebar-nav" aria-label="Secciones del panel">
+            {secciones.map((s) => (
+              <a
+                key={s.id}
+                href={`#${s.id}`}
+                aria-current={seccionActiva === s.id ? "location" : undefined}
+                onClick={() => setMenuAbierto(false)}
+              >
+                {s.texto}
+              </a>
+            ))}
+          </nav>
+
+          <div className="sidebar-pie">
+            {usuario ? (
+              <div className="sidebar-usuario">
+                <span className="sidebar-usuario-nombre">{usuario.nombre}</span>
+                <span className="sidebar-rol">{esAdmin ? "Personal de planta" : "Cliente"}</span>
+              </div>
+            ) : (
+              <span className="sidebar-sub">Cargando…</span>
+            )}
+            <div className="sidebar-acciones">
+              <button type="button" onClick={alternarTema} className="btn-sidebar" aria-label="Cambiar tema claro u oscuro">
+                {tema === "oscuro" ? "Tema claro" : "Tema oscuro"}
+              </button>
+              <button type="button" onClick={cerrarSesion} className="btn-sidebar">Salir</button>
+            </div>
           </div>
         </div>
-        <div className="session">
-          <button onClick={alternarTema} className="btn-quiet" title="Cambiar tema" aria-label="Cambiar tema claro/oscuro">
-            {tema === "oscuro" ? "☀️ Claro" : "🌙 Oscuro"}
-          </button>
-          {usuario ? (
-            <>
-              <span className="who">{usuario.nombre}</span>
-              <span className="role-tag">{usuario.rol === "admin_macromec" ? "Planta" : "Cliente"}</span>
-              <button onClick={cerrarSesion} className="btn-quiet">Salir</button>
-            </>
-          ) : (
-            <span>Cargando…</span>
-          )}
-        </div>
-      </div>
+      </aside>
 
-      {modoSimulado && (
-        <div className="banner banner-caution">
-          Mostrando datos simulados — cámara y modelo de conteo aún no conectados en definitivo.
-        </div>
-      )}
+      {/* ================= Contenido ================= */}
+      <main className="main">
+        <header className="page-head" id="resumen">
+          <div>
+            <h1>Panel de producción</h1>
+            <p className="page-sub">
+              Lavadero de zanahorias · {hoy ? `Hoy ${etiquetaDia(hoy)}` : "—"}
+              {actualizadoEn && ` · actualizado ${actualizadoEn.toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`}
+            </p>
+          </div>
+          <div className="segmentado" role="radiogroup" aria-label="Datos a mostrar">
+            {(["real", "prueba", "todos"] as Vista[]).map((v) => (
+              <button
+                key={v}
+                type="button"
+                role="radio"
+                aria-checked={vista === v}
+                className={vista === v ? "activo" : ""}
+                onClick={() => setVista(v)}
+              >
+                {{ real: "Reales", prueba: "Prueba", todos: "Todos" }[v]}
+              </button>
+            ))}
+          </div>
+        </header>
 
-      {hayDiscrepancias && (
-        <div className="banner banner-alert">
-          Discrepancia detectada entre el conteo automático y el reporte del contratista en al menos un registro.
-        </div>
-      )}
-
-      <div className="readout">
-        <p className="readout-label">Último conteo registrado</p>
-        <p className="readout-value">
-          {cargando ? "—" : ultimo ? ultimo.cantidadSacos : "0"}
-          <span className="unit">sacos</span>
-        </p>
-        <div className="readout-meta">
-          <span>{ultimo ? tiempoRelativo(ultimo.creadoEn) : "sin registros aún"}</span>
-          {ultimo && <span>confianza <b>{ultimo.confianzaPromedio ?? "—"}%</b></span>}
-          <span>total en el registro <b>{totalHoy}</b> sacos</span>
-          {conteosFiltrados.length > 0 && <span>confianza media <b>{confianzaProm}%</b></span>}
-        </div>
-      </div>
-
-      {/* ---- Tarjetas de resumen ---- */}
-      <div className="stats-row">
-        <div className="stat-card">
-          <span className="stat-label">Total (filtro actual)</span>
-          <span className="stat-value">{totalHoy}</span>
-          <span className="stat-sub">sacos</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-label">Confianza media</span>
-          <span className="stat-value">{confianzaProm}%</span>
-          <span className="stat-sub">{conteosFiltrados.length} registros</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-label">Tendencia</span>
-          {tendencia === null ? (
-            <span className="stat-value stat-value-sm">—</span>
-          ) : (
-            <span className={`stat-value ${tendencia >= 0 ? "stat-up" : "stat-down"}`}>
-              {tendencia >= 0 ? "↑" : "↓"} {Math.abs(tendencia)}%
-            </span>
-          )}
-          <span className="stat-sub">vs. periodo anterior</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-label">Discrepancias</span>
-          <span className={`stat-value ${hayDiscrepancias ? "stat-down" : ""}`}>
-            {conteosFiltrados.filter((c) => c.discrepancia).length}
-          </span>
-          <span className="stat-sub">de {conteosFiltrados.length} registros</span>
-        </div>
-      </div>
-
-      {/* ---- Gráfico de tendencia ---- */}
-      <div className="chart-card">
-        <div className="section-head">
-          <h2>Tendencia de conteo</h2>
-        </div>
-        <GraficoTendencia datos={conteosFiltrados.slice(0, 30)} />
-      </div>
-
-      <div className="section-head">
-        <h2>Historial reciente</h2>
-        <span className="count">{conteosFiltrados.length} registro{conteosFiltrados.length !== 1 ? "s" : ""}</span>
-      </div>
-
-      {/* ---- Filtros ---- */}
-      <div className="filters-bar">
-        <input
-          type="text"
-          placeholder="Buscar por cámara/origen…"
-          value={filtroCamara}
-          onChange={(e) => setFiltroCamara(e.target.value)}
-          className="filter-input"
-        />
-        <label className="filter-date">
-          Desde
-          <input type="date" value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)} />
-        </label>
-        <label className="filter-date">
-          Hasta
-          <input type="date" value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)} />
-        </label>
-        <label className="filter-check">
-          <input type="checkbox" checked={soloDiscrepancias} onChange={(e) => setSoloDiscrepancias(e.target.checked)} />
-          Solo discrepancias
-        </label>
-        {hayFiltrosActivos && (
-          <button onClick={limpiarFiltros} className="btn-quiet">Limpiar filtros</button>
+        {/* ---- Avisos ---- */}
+        {modoSimulado && (
+          <div className="aviso aviso-prueba">
+            Base de datos no configurada: se muestran datos simulados de ejemplo, no detecciones reales.
+          </div>
         )}
-        <button onClick={exportarCSV} className="btn-carrot btn-export" disabled={conteosFiltrados.length === 0}>
-          ⬇ Exportar CSV
-        </button>
-      </div>
+        {errorCarga && (
+          <div className="aviso aviso-critico" role="alert">
+            No se pudo actualizar la información. Se muestran los últimos datos recibidos.
+          </div>
+        )}
+        {vista !== "real" && !modoSimulado && (
+          <div className="aviso aviso-prueba">
+            {vista === "prueba"
+              ? "Estás viendo DATOS DE PRUEBA. No corresponden a detecciones reales del sistema de visión."
+              : "Vista combinada: los datos de prueba están marcados con la etiqueta «Prueba»."}
+          </div>
+        )}
+        {vista === "real" && !hayReales && !cargando && !modoSimulado && (
+          <div className="aviso aviso-info">
+            Todavía no hay conteos reales del sistema de visión.
+            {cantidadPrueba > 0 && (
+              <>
+                {" "}Hay {cantidadPrueba} registro{cantidadPrueba !== 1 ? "s" : ""} de prueba.{" "}
+                <button type="button" className="btn-link" onClick={() => setVista("prueba")}>Ver datos de prueba</button>
+              </>
+            )}
+          </div>
+        )}
+        {discrepanciasVista > 0 && (
+          <div className="aviso aviso-critico">
+            <span aria-hidden="true">⚠</span> {discrepanciasVista} conteo{discrepanciasVista !== 1 ? "s" : ""} con discrepancia
+            entre el conteo automático y el reporte del contratista.{" "}
+            <button type="button" className="btn-link" onClick={() => { setSoloDiscrepancias(true); location.hash = "historial"; }}>
+              Revisar
+            </button>
+          </div>
+        )}
 
-      <table className="manifest">
-        <thead>
-          <tr>
-            <th></th>
-            <th>Hora</th>
-            <th>Sacos</th>
-            <th>Cámara / origen</th>
-            <th>Confianza</th>
-            <th>Contratista</th>
-          </tr>
-        </thead>
-        <tbody>
-          {conteosFiltrados.map((c) => {
-            const expandida = filaExpandida === c.id;
-            return (
-              <Fragment key={c.id}>
-                <tr
-                  className={`${c.discrepancia ? "flagged" : ""} fila-clicable`}
-                  onClick={() => setFilaExpandida(expandida ? null : c.id)}
-                >
-                  <td data-label="" className="expand-toggle">{expandida ? "▾" : "▸"}</td>
-                  <td data-label="Hora" className="muted">{new Date(c.creadoEn).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" })}</td>
-                  <td data-label="Sacos" className="num">{c.cantidadSacos}</td>
-                  <td data-label="Origen" className="muted">{c.fuenteCamara ?? "—"}</td>
-                  <td data-label="Confianza">{c.confianzaPromedio ?? "—"}%</td>
-                  <td data-label="Contratista">
-                    {c.reporteContratista ? (
-                      <>
-                        {c.reporteContratista.cantidadReportada}{" "}
-                        {c.discrepancia && <span className="tag tag-flag">discrepancia</span>}
-                      </>
-                    ) : (
-                      <span className="muted">—</span>
-                    )}
-                  </td>
+        {/* ---- Indicadores ---- */}
+        <section className="kpis" aria-label={`Indicadores · ${etiquetaVista}`}>
+          <div className="kpi kpi-hero">
+            <span className="kpi-label">Producción de hoy</span>
+            <span className="kpi-valor">{cargando ? "—" : fmt(produccionHoy?.totalSacos ?? 0)}<span className="kpi-unidad">sacos</span></span>
+            <span className="kpi-sub">
+              {produccionHoy?.registros ?? 0} registro{(produccionHoy?.registros ?? 0) !== 1 ? "s" : ""} hoy
+              {vista !== "real" && <> · <EtiquetaPrueba /></>}
+            </span>
+          </div>
+
+          <div className="kpi">
+            <span className="kpi-label">Último conteo</span>
+            <span className="kpi-valor">{ultimo ? fmt(ultimo.cantidadSacos) : "—"}</span>
+            <span className="kpi-sub">
+              {ultimo ? <>{tiempoRelativo(fechaDe(ultimo))}{esPrueba(ultimo) && <> · <EtiquetaPrueba /></>}</> : "sin registros"}
+            </span>
+          </div>
+
+          <div className="kpi">
+            <span className="kpi-label">Últimos 7 días</span>
+            <span className="kpi-valor">{fmt(ultimos7)}</span>
+            <span className="kpi-sub">
+              {tendencia === null ? (
+                "sin periodo anterior para comparar"
+              ) : (
+                <span className={tendencia >= 0 ? "delta-sube" : "delta-baja"}>
+                  {tendencia >= 0 ? "▲" : "▼"} {Math.abs(tendencia)} % vs. 7 días previos
+                </span>
+              )}
+            </span>
+          </div>
+
+          <div className="kpi">
+            <span className="kpi-label">Confianza media del modelo</span>
+            <span className={`kpi-valor ${confianzaMedia === null ? "kpi-valor-sm" : ""}`}>
+              {confianzaMedia === null ? "No disponible" : `${confianzaMedia.toLocaleString("es-PE", { maximumFractionDigits: 1 })} %`}
+            </span>
+            <span className="kpi-sub">
+              {confianzaMedia === null
+                ? "el detector aún no reporta confianza"
+                : `${confianzas.length} de ${conteosVista.length} registros la reportan`}
+            </span>
+          </div>
+
+          <div className="kpi">
+            <span className="kpi-label">Discrepancias</span>
+            <span className="kpi-valor">
+              {discrepanciasVista > 0 && <span className="estado-icono estado-critico" aria-hidden="true">⚠</span>}
+              {discrepanciasVista}
+            </span>
+            <span className="kpi-sub">de {conteosVista.length} registros recientes</span>
+          </div>
+        </section>
+
+        {/* ---- Producción diaria ---- */}
+        <section className="tarjeta" id="produccion">
+          {/* Foto de la planta (#81): decorativa, se carga al acercarse a la sección */}
+          <img
+            className="tarjeta-foto"
+            src="/fotos/produccion.webp"
+            srcSet="/fotos/produccion-640.webp 640w, /fotos/produccion.webp 1280w"
+            sizes="(max-width: 900px) 100vw, 1000px"
+            alt="Fila de sacos de zanahoria junto a las pozas de lavado"
+            width={1280}
+            height={720}
+            loading="lazy"
+            decoding="async"
+          />
+          <div className="tarjeta-head">
+            <div>
+              <h2>Producción diaria</h2>
+              <p className="tarjeta-sub">Sacos contados por día · últimos {diasSerie} días · hora de Lima · {etiquetaVista.toLowerCase()}</p>
+            </div>
+          </div>
+          {dias.length > 0 ? <GraficoProduccion dias={dias} hoy={hoy} /> : <p className="vacio">Sin datos de producción.</p>}
+        </section>
+
+        {/* ---- Cámaras ---- */}
+        <section className="tarjeta" id="camaras">
+          <div className="tarjeta-head">
+            <div>
+              <h2>Cámaras y fuentes de conteo</h2>
+              <p className="tarjeta-sub">
+                El sistema de visión aún no envía señal de estado (en línea / fuera de línea). Se muestra el último conteo recibido de cada fuente.
+              </p>
+            </div>
+          </div>
+          {fuentesVista.length === 0 ? (
+            <p className="vacio">Ninguna cámara ha enviado conteos todavía.</p>
+          ) : (
+            <ul className="fuentes">
+              {fuentesVista.map((f) => (
+                <li key={`${f.fuenteCamara}-${f.esPrueba}`} className="fuente">
+                  <span className="estado-punto estado-desconocido" aria-hidden="true" />
+                  <div className="fuente-info">
+                    <span className="fuente-nombre">
+                      {f.fuenteCamara ?? "Sin identificar"} {f.esPrueba && <EtiquetaPrueba />}
+                    </span>
+                    <span className="fuente-meta">
+                      Estado: sin telemetría · último conteo {tiempoRelativo(f.ultimoRegistro)} ({new Date(f.ultimoRegistro).toLocaleString("es-PE")}) · {f.registros} registro{f.registros !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {/* ---- Historial ---- */}
+        <section className="tarjeta" id="historial">
+          <div className="tarjeta-head">
+            <div>
+              <h2>Historial de conteos</h2>
+              <p className="tarjeta-sub">
+                {conteosFiltrados.length} registro{conteosFiltrados.length !== 1 ? "s" : ""} · {fmt(totalFiltrado)} sacos
+                {hayFiltrosActivos ? " (con filtros)" : ""} · últimos {LIMITE_HISTORIAL} como máximo
+              </p>
+            </div>
+            <button onClick={exportarCSV} className="btn-acento" disabled={conteosFiltrados.length === 0}>
+              Exportar CSV
+            </button>
+          </div>
+
+          <div className="filtros">
+            <input
+              type="search"
+              placeholder="Buscar por cámara u origen…"
+              value={filtroCamara}
+              onChange={(e) => setFiltroCamara(e.target.value)}
+              className="filtro-input"
+              aria-label="Buscar por cámara u origen"
+            />
+            <label className="filtro-fecha">
+              Desde
+              <input type="date" value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)} />
+            </label>
+            <label className="filtro-fecha">
+              Hasta
+              <input type="date" value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)} />
+            </label>
+            <label className="filtro-check">
+              <input type="checkbox" checked={soloDiscrepancias} onChange={(e) => setSoloDiscrepancias(e.target.checked)} />
+              Solo discrepancias
+            </label>
+            {hayFiltrosActivos && (
+              <button onClick={limpiarFiltros} className="btn-secundario">Limpiar filtros</button>
+            )}
+          </div>
+
+          {hayDiscrepanciasFiltradas && (
+            <p className="nota-critica"><span aria-hidden="true">⚠</span> Las filas marcadas tienen discrepancia con el reporte del contratista.</p>
+          )}
+
+          <div className="tabla-scroll">
+            <table className="historial">
+              <thead>
+                <tr>
+                  <th aria-label="Detalle"></th>
+                  <th>Fecha y hora</th>
+                  <th className="num">Sacos</th>
+                  <th>Cámara / origen</th>
+                  <th className="num">Confianza</th>
+                  <th>Contratista</th>
                 </tr>
-                {expandida && (
-                  <tr className="fila-detalle">
+              </thead>
+              <tbody>
+                {conteosFiltrados.map((c) => {
+                  const expandida = filaExpandida === c.id;
+                  const confianza = confianzaNumerica(c.confianzaPromedio);
+                  return (
+                    <Fragment key={c.id}>
+                      <tr
+                        className={`fila ${c.discrepancia ? "fila-discrepancia" : ""} ${esPrueba(c) ? "fila-prueba" : ""}`}
+                        onClick={() => setFilaExpandida(expandida ? null : c.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setFilaExpandida(expandida ? null : c.id);
+                          }
+                        }}
+                        tabIndex={0}
+                        aria-expanded={expandida}
+                      >
+                        <td data-label="" className="celda-toggle" aria-hidden="true">{expandida ? "▾" : "▸"}</td>
+                        <td data-label="Fecha">
+                          {new Date(fechaDe(c)).toLocaleString("es-PE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                          {esPrueba(c) && <> <EtiquetaPrueba /></>}
+                        </td>
+                        <td data-label="Sacos" className="num fuerte">{fmt(c.cantidadSacos)}</td>
+                        <td data-label="Origen" className="tenue">{c.fuenteCamara ?? "—"}</td>
+                        <td data-label="Confianza" className="num">{confianza === null ? <span className="tenue">—</span> : `${confianza.toLocaleString("es-PE", { maximumFractionDigits: 1 })} %`}</td>
+                        <td data-label="Contratista">
+                          {c.reporteContratista ? (
+                            <>
+                              {fmt(c.reporteContratista.cantidadReportada)}{" "}
+                              {c.discrepancia ? (
+                                <span className="badge badge-critico"><span aria-hidden="true">⚠</span> discrepancia</span>
+                              ) : (
+                                <span className="badge badge-ok"><span aria-hidden="true">✓</span> coincide</span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="tenue">sin reporte</span>
+                          )}
+                        </td>
+                      </tr>
+                      {expandida && (
+                        <tr className="fila-detalle">
+                          <td colSpan={6}>
+                            <dl className="detalle-grid">
+                              <div><dt>ID de registro</dt><dd>{c.id}</dd></div>
+                              <div><dt>Fecha del conteo</dt><dd>{c.contadoEn ? new Date(c.contadoEn).toLocaleString("es-PE") : <span className="tenue">No informada (registro anterior)</span>}</dd></div>
+                              <div><dt>Recibido en la web</dt><dd>{new Date(c.creadoEn).toLocaleString("es-PE")}</dd></div>
+                              <div><dt>Tipo de dato</dt><dd>{esPrueba(c) ? "Prueba (no es una detección real)" : "Real"}</dd></div>
+                              <div><dt>Origen del registro</dt><dd className="mono">{c.origen ?? "—"}</dd></div>
+                              <div><dt>Cámara / fuente</dt><dd className="mono">{c.fuenteCamara ?? "—"}</dd></div>
+                              <div><dt>Confianza del modelo</dt><dd>{formatoConfianza(c.confianzaPromedio)}</dd></div>
+                              <div>
+                                <dt>Reporte del contratista</dt>
+                                <dd>
+                                  {c.reporteContratista
+                                    ? `${fmt(c.reporteContratista.cantidadReportada)} sacos${c.reporteContratista.nombreContratista ? " — " + c.reporteContratista.nombreContratista : ""}`
+                                    : "sin reporte"}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt>Estado</dt>
+                                <dd>{c.discrepancia ? "⚠ Discrepancia con el reporte manual" : "✓ Coincide o sin reporte"}</dd>
+                              </div>
+                            </dl>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+                {conteosFiltrados.length === 0 && (
+                  <tr className="fila-vacia">
                     <td colSpan={6}>
-                      <div className="detalle-grid">
-                        <div><span className="detalle-label">ID de registro</span><span>{c.id}</span></div>
-                        <div><span className="detalle-label">Fecha completa</span><span>{new Date(c.creadoEn).toLocaleString("es-PE")}</span></div>
-                        <div><span className="detalle-label">Origen completo</span><span className="detalle-mono">{c.fuenteCamara ?? "—"}</span></div>
-                        <div><span className="detalle-label">Confianza del modelo</span><span>{c.confianzaPromedio ?? "—"}%</span></div>
-                        <div><span className="detalle-label">Reporte del contratista</span><span>{c.reporteContratista ? `${c.reporteContratista.cantidadReportada} sacos${c.reporteContratista.nombreContratista ? " — " + c.reporteContratista.nombreContratista : ""}` : "sin reporte"}</span></div>
-                        <div><span className="detalle-label">Estado</span><span>{c.discrepancia ? "⚠ Discrepancia con el reporte manual" : "✓ Coincide o sin reporte"}</span></div>
-                      </div>
+                      {conteosVista.length === 0
+                        ? vista === "real" ? "Todavía no hay conteos reales registrados." : "No hay conteos en esta vista."
+                        : "Ningún registro coincide con los filtros aplicados."}
                     </td>
                   </tr>
                 )}
-              </Fragment>
-            );
-          })}
-          {conteosFiltrados.length === 0 && (
-            <tr className="empty-row">
-              <td colSpan={6}>{conteos.length === 0 ? "Todavía no hay conteos registrados." : "Ningún registro coincide con los filtros aplicados."}</td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+              </tbody>
+            </table>
+          </div>
+        </section>
 
-      {usuario?.rol === "admin_macromec" && (
-        <>
-          <ReporteContratistaModule ultimoConteoId={ultimo?.id} onRegistrado={cargar} />
-          <VentasModule ultimoConteoId={ultimo?.id} />
-        </>
-      )}
+        {esAdmin && (
+          <>
+            <ReporteContratistaModule conteo={conteoParaModulos} onRegistrado={cargar} />
+            <VentasModule conteo={conteoParaModulos} />
+          </>
+        )}
+
+        <footer className="pie">MACROMEC J&amp;S S.A.C. · Sistema de conteo automatizado de sacos</footer>
+      </main>
     </div>
   );
 }

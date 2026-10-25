@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ConteoObjetivo, type ConteoResumido } from "./ConteoObjetivo";
 
 type Venta = {
   id: number;
@@ -10,17 +11,21 @@ type Venta = {
   totalVenta: string | number | null;
   confirmada: boolean;
   creadoEn: string;
+  esPrueba?: boolean;
 };
 
 type Props = {
-  ultimoConteoId?: number;
+  conteo?: ConteoResumido; // último conteo de la vista actual
 };
 
-export function VentasModule({ ultimoConteoId }: Props) {
+const soles = (v: string | number | null) =>
+  v === null || v === "" ? "—" : `S/ ${Number(v).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+export function VentasModule({ conteo }: Props) {
   const [ventas, setVentas] = useState<Venta[]>([]);
   const [precio, setPrecio] = useState("");
   const [registrando, setRegistrando] = useState(false);
-  const [mensaje, setMensaje] = useState("");
+  const [mensaje, setMensaje] = useState<{ ok: boolean; texto: string } | null>(null);
 
   async function cargarVentas() {
     const res = await fetch("/api/ventas", { cache: "no-store" });
@@ -36,80 +41,94 @@ export function VentasModule({ ultimoConteoId }: Props) {
 
   async function registrarVenta(e: React.FormEvent) {
     e.preventDefault();
-    if (!ultimoConteoId) {
-      setMensaje("No hay ningún conteo disponible para vender todavía.");
+    if (!conteo) {
+      setMensaje({ ok: false, texto: "No hay ningún conteo disponible para vender todavía." });
       return;
     }
 
     setRegistrando(true);
-    setMensaje("");
+    setMensaje(null);
 
-    const res = await fetch("/api/ventas", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ conteoId: ultimoConteoId, precioPorSaco: Number(precio) }),
-    });
+    try {
+      const res = await fetch("/api/ventas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conteoId: conteo.id, precioPorSaco: Number(precio) }),
+      });
 
-    if (res.ok) {
-      setPrecio("");
-      setMensaje("Venta registrada.");
-      cargarVentas();
-    } else {
-      const data = await res.json();
-      setMensaje(data.error || "No se pudo registrar la venta.");
+      if (res.ok) {
+        setPrecio("");
+        setMensaje({ ok: true, texto: "Venta registrada." });
+        cargarVentas();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setMensaje({ ok: false, texto: data.error || "No se pudo registrar la venta." });
+      }
+    } catch {
+      setMensaje({ ok: false, texto: "Error de conexión. Intente nuevamente." });
+    } finally {
+      setRegistrando(false);
     }
-    setRegistrando(false);
   }
 
-  return (
-    <div className="ledger">
-      <h2>Registro de venta</h2>
+  const precioNum = Number(precio);
+  const totalEstimado = conteo && precio && precioNum > 0 ? precioNum * conteo.cantidadSacos : null;
 
-      <form onSubmit={registrarVenta} className="ledger-form">
-        <label htmlFor="precio">Precio por saco (S/)</label>
-        <input
-          id="precio"
-          type="number"
-          step="0.01"
-          min="0"
-          value={precio}
-          onChange={(e) => setPrecio(e.target.value)}
-          required
-        />
-        <button type="submit" className="btn-carrot" disabled={registrando}>
-          {registrando ? "Registrando…" : "Registrar venta del último conteo"}
+  return (
+    <section className="tarjeta" id="ventas">
+      <div className="tarjeta-head">
+        <div>
+          <h2>Registro de venta</h2>
+          <p className="tarjeta-sub">El total se calcula con los sacos del conteo seleccionado.</p>
+        </div>
+      </div>
+
+      <ConteoObjetivo conteo={conteo} />
+
+      <form onSubmit={registrarVenta} className="formulario">
+        <label className="campo">
+          <span>Precio por saco (S/)</span>
+          <input type="number" step="0.01" min="0.01" value={precio} onChange={(e) => setPrecio(e.target.value)} required />
+        </label>
+        {totalEstimado !== null && (
+          <p className="total-estimado">Total: <strong>{soles(totalEstimado)}</strong></p>
+        )}
+        <button type="submit" className="btn-acento" disabled={registrando || !conteo}>
+          {registrando ? "Registrando…" : "Registrar venta"}
         </button>
       </form>
 
-      {mensaje && <p className={`ledger-msg ${mensaje.includes("registrada") ? "ok" : "err"}`}>{mensaje}</p>}
+      {mensaje && <p className={`mensaje ${mensaje.ok ? "mensaje-ok" : "mensaje-error"}`} role="status">{mensaje.texto}</p>}
 
-      <table>
-        <thead>
-          <tr>
-            <th>Fecha</th>
-            <th>Sacos</th>
-            <th>Precio/saco</th>
-            <th>Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          {ventas.map((v) => (
-            <tr key={v.id}>
-              <td>{new Date(v.creadoEn).toLocaleString("es-PE")}</td>
-              <td className="num">{v.cantidadSacos ?? "—"}</td>
-              <td className="num">S/ {v.precioPorSaco ?? "—"}</td>
-              <td className="num">S/ {v.totalVenta ?? "—"}</td>
-            </tr>
-          ))}
-          {ventas.length === 0 && (
+      <div className="tabla-scroll">
+        <table className="historial">
+          <thead>
             <tr>
-              <td colSpan={4} style={{ textAlign: "center", color: "var(--paper-muted)", fontStyle: "italic" }}>
-                Aún no hay ventas registradas.
-              </td>
+              <th>Fecha</th>
+              <th>Conteo</th>
+              <th className="num">Sacos</th>
+              <th className="num">Precio/saco</th>
+              <th className="num">Total</th>
             </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {ventas.map((v) => (
+              <tr key={v.id} className={v.esPrueba ? "fila-prueba" : ""}>
+                <td data-label="Fecha">{new Date(v.creadoEn).toLocaleString("es-PE")}</td>
+                <td data-label="Conteo">#{v.conteoId} {v.esPrueba && <span className="badge badge-prueba">Prueba</span>}</td>
+                <td data-label="Sacos" className="num">{v.cantidadSacos?.toLocaleString("es-PE") ?? "—"}</td>
+                <td data-label="Precio/saco" className="num">{soles(v.precioPorSaco)}</td>
+                <td data-label="Total" className="num fuerte">{soles(v.totalVenta)}</td>
+              </tr>
+            ))}
+            {ventas.length === 0 && (
+              <tr className="fila-vacia">
+                <td colSpan={5}>Aún no hay ventas registradas.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
