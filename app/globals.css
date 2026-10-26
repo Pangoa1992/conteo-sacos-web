@@ -580,7 +580,7 @@ button, input { font-family: inherit; }
   margin-bottom: 0.85rem;
 }
 
-.filtro-input, .filtro-fecha input, .filtro-fecha select, .campo input, .campo textarea {
+.filtro-input, .filtro-fecha input, .filtro-fecha select, .campo input, .campo select, .campo textarea {
   border: 1px solid var(--linea);
   background: var(--superficie);
   color: var(--texto);
@@ -740,6 +740,26 @@ button, input { font-family: inherit; }
 .mensaje ul { margin: 0; padding-left: 1.1rem; }
 .campo-bloque { flex: 1 1 100%; margin-bottom: 0.75rem; }
 .campo textarea { width: 100%; max-width: 640px; font-family: inherit; resize: vertical; }
+
+/* ---------- Ventas parciales (etapa 3B) ---------- */
+
+.campo-lote select { width: 340px; max-width: 100%; }
+.venta-resumen { display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.86rem; color: var(--texto-2); padding-bottom: 0.35rem; min-width: 150px; }
+.subtitulo { margin: 1.3rem 0 0.5rem; font-size: 0.92rem; font-weight: 600; color: var(--texto); }
+.venta-acciones { display: inline-flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.btn-chico { padding: 0.2rem 0.6rem; font-size: 0.78rem; }
+.tabla-ventas td.num, .tabla-ventas td[data-label="Fecha"], .tabla-stock td[data-label="Fecha"] { white-space: nowrap; }
+.btn-ver-todas { margin-top: 0.6rem; color: var(--texto-2); font-weight: 500; font-size: 0.85rem; }
+.fila-anulada td { color: var(--texto-tenue); }
+.fila-anulada td.num { text-decoration: line-through; }
+.fila-detalle-venta td { font-size: 0.82rem; color: var(--texto-2); background: var(--superficie-2); }
+.formulario-anulacion { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.25rem 0; }
+.acciones-anulacion { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.badge-agotado { background: var(--superficie-2); color: var(--texto-2); border: 1px solid var(--linea); }
+.badge-historica { background: var(--aviso-bg); color: var(--aviso); border: 1px dashed var(--aviso); text-transform: uppercase; letter-spacing: 0.05em; }
+.historicas { margin-top: 1.3rem; border-top: 1px solid var(--linea); padding-top: 0.9rem; }
+.historicas summary { cursor: pointer; font-size: 0.92rem; font-weight: 600; color: var(--texto); }
+.historicas .tarjeta-sub { margin: 0.4rem 0 0.6rem; }
 
 /* ---------- Validación de conteos (fila expandida del historial) ---------- */
 
@@ -999,8 +1019,9 @@ button, input { font-family: inherit; }
     text-align: left;
   }
   .historial .celda-toggle { display: none; }
-  .historial .fila-detalle td, .historial .fila-vacia td { display: block; text-align: left; }
-  .historial .fila-detalle td::before, .historial .fila-vacia td::before { content: none; }
+  .historial .fila-detalle td, .historial .fila-vacia td, .historial .fila-detalle-venta td { display: block; text-align: left; }
+  .historial .fila-detalle td::before, .historial .fila-vacia td::before, .historial .fila-detalle-venta td::before { content: none; }
+  .campo-lote, .campo-lote select { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

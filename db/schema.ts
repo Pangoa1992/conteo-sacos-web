@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, varchar, timestamp, boolean, numeric, char, customType } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, varchar, timestamp, boolean, numeric, char, customType, uuid } from "drizzle-orm/pg-core";
 
 // drizzle-orm 0.33 no trae bytea; postgres-js lo entrega como Buffer.
 const bytea = customType<{ data: Buffer }>({
@@ -70,7 +70,10 @@ export const reportesContratista = pgTable("reportes_contratista", {
 });
 
 /**
- * Registro de venta / facturación asociado a un conteo confirmado.
+ * VENTAS HISTÓRICAS: registros anteriores al control de validación (vendían
+ * el lote completo sin revisar). Desde la migración 0005 la tabla está
+ * congelada por triggers (sin altas, cambios ni borrados) y no cuenta para el
+ * stock. Las ventas nuevas van a ventas_lote.
  */
 export const ventas = pgTable("ventas", {
   id: serial("id").primaryKey(),
@@ -79,6 +82,32 @@ export const ventas = pgTable("ventas", {
   totalVenta: numeric("total_venta", { precision: 10, scale: 2 }),
   confirmada: boolean("confirmada").notNull().default(false),
   creadoEn: timestamp("creado_en").notNull().defaultNow(),
+});
+
+/**
+ * Ventas parciales de un lote (etapa 3B, ampliación del prototipo).
+ * Solo se venden sacos CONFORMES de lotes APROBADOS. El stock no se guarda:
+ * disponible = sacos conformes − ventas activas del lote, así una anulación
+ * devuelve los sacos sin duplicar existencias. Las ventas no se borran: se
+ * anulan con motivo. El importe lo calcula el servidor (cantidad × precio).
+ */
+export const ventasLote = pgTable("ventas_lote", {
+  id: serial("id").primaryKey(),
+  conteoId: integer("conteo_id").references(() => conteos.id).notNull(),
+  cantidadSacos: integer("cantidad_sacos").notNull(),
+  precioUnitario: numeric("precio_unitario", { precision: 10, scale: 2 }).notNull(),
+  importe: numeric("importe", { precision: 12, scale: 2 }).notNull(),
+  comprador: varchar("comprador", { length: 150 }),
+  registradaPor: integer("registrada_por").references(() => usuarios.id).notNull(),
+  registradaEn: timestamp("registrada_en").notNull().defaultNow(),
+  anuladaEn: timestamp("anulada_en"),
+  anuladaPor: integer("anulada_por").references(() => usuarios.id),
+  motivoAnulacion: varchar("motivo_anulacion", { length: 300 }),
+  // Clave de idempotencia (UUID) que genera el navegador por operación: un
+  // doble clic o un reintento con la misma clave no crea otra venta (0006).
+  claveIdempotencia: uuid("clave_idempotencia").notNull().unique(),
+  // CHECK, triggers de stock (con bloqueo del lote) e inmutabilidad: escritos
+  // a mano en las migraciones 0005 y 0006.
 });
 
 /**

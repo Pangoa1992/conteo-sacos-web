@@ -36,6 +36,20 @@
       "when": 1793025964216,
       "tag": "0004_etapa2_evidencias",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793042607691,
+      "tag": "0005_etapa3b_ventas_parciales",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793044521246,
+      "tag": "0006_etapa3b_idempotencia_ventas",
+      "breakpoints": true
     }
   ]
 }

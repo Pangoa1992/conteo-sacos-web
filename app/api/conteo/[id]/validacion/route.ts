@@ -10,6 +10,8 @@ import {
   erroresValidacion,
   hayDiscrepancia,
 } from "@/lib/conteos";
+import { errorValidacionConVentas, esRechazoDeVentaEnBD } from "@/lib/ventas";
+import { sacosVendidosActivos } from "@/lib/ventas-servidor";
 
 const cantidad = z.number().int().nonnegative();
 
@@ -146,6 +148,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         throw new Rechazo(400, { error: "Validación incoherente", errores });
       }
 
+      // Ventas activas del lote: la nueva validación debe seguir respaldándolas
+      // (el trigger conteos_proteger_ventas lo vuelve a comprobar en la BD).
+      const errorVentas = errorValidacionConVentas(await sacosVendidosActivos(tx, id), estado, clasificacion?.conformes ?? null);
+      if (errorVentas) {
+        throw new Rechazo(409, { error: "El lote tiene ventas activas", errores: [errorVentas] });
+      }
+
       const valores = {
         sacosConformes: clasificacion?.conformes ?? null,
         sacosObservados: clasificacion?.observados ?? null,
@@ -180,6 +189,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   } catch (err) {
     if (err instanceof Rechazo) {
       return NextResponse.json(err.cuerpo, { status: err.status });
+    }
+    const rechazoVenta = esRechazoDeVentaEnBD(err);
+    if (rechazoVenta) {
+      return NextResponse.json({ error: "El lote tiene ventas activas", errores: [rechazoVenta] }, { status: 409 });
     }
     console.error("[validacion] Error al registrar la validación:", err instanceof Error ? err.message : err);
     return NextResponse.json({ error: "No se pudo registrar la validación" }, { status: 503 });

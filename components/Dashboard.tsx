@@ -722,7 +722,7 @@ export function Dashboard() {
         {esAdmin && (
           <>
             <ReporteContratistaModule conteo={conteoParaModulos} onRegistrado={cargar} />
-            <VentasModule conteo={conteoParaModulos} />
+            <VentasModule incluir={enVista} esVistaPrueba={vista !== "real"} recarga={actualizadoEn} />
           </>
         )}
 

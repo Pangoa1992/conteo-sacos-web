@@ -21,6 +21,12 @@ Roles: `admin_macromec` (personal MACROMEC: ve todo, incluido contratistas y ven
 - `GET/POST /api/ventas` — listar y registrar ventas (requiere rol admin_macromec).
 - `POST /api/reportes-contratista` — registra lo que el contratista dice haber armado, para comparar contra el conteo automático.
 
+🔧 **Ampliación local, aún no desplegada (etapa 3B, migraciones 0005-0006)** — ventas parciales:
+- `GET /api/ventas` — ventas parciales, stock por lote aprobado y, aparte, las ventas históricas (anteriores al control de validación, de solo lectura).
+- `POST /api/ventas` — `{ conteoId, cantidadSacos, precioUnitario, comprador?, claveIdempotencia }`: vende sacos conformes de un lote aprobado; el importe lo calcula el servidor. La misma `claveIdempotencia` (UUID por operación) no crea una segunda venta.
+- `PATCH /api/ventas/:id/anular` — `{ motivo }`: anula la venta y los sacos vuelven al stock.
+- Todas requieren rol admin_macromec. Sustituyen al contrato anterior de `POST /api/ventas` (`{ conteoId, precioPorSaco }`, lote completo).
+
 ⚠️ El **número de sacos** que se muestra todavía es simulado (aleatorio), porque el modelo de detección real (YOLOv8) está pendiente de fotos/video reales de la fábrica para poder entrenarse/adaptarse.
 
 ## Cómo correrlo localmente
