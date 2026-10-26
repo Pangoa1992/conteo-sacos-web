@@ -5,6 +5,10 @@
    naranja. Paleta de gráficos validada (dataviz/validate_palette.js):
    claro  #1450B4 + #E8632A sobre #ffffff  -> todas las pruebas PASS
    oscuro #5B8DEF + #E8632A sobre #111c2e  -> todas las pruebas PASS
+   Estados de validación en gráficos (paleta de estado, etapa 3A):
+   #0ca30c / #fab219 / #d03b3b + gris pendiente (#a7b0bd claro, #56647a oscuro):
+   separación CVD y visión normal PASS en ambos modos; contraste < 3:1 en
+   amarillo/gris -> siempre con leyenda, valores escritos y vista de tabla.
    ===================================================================== */
 
 :root {
@@ -47,6 +51,13 @@
   --prueba-bg: #f1ecfa;
   --prueba-borde: #c9b8ec;
 
+  /* Rellenos de estado en gráficos (no para texto). Mismo significado en las
+     dos barras: bueno / con observación / malo / sin revisar. */
+  --relleno-bueno: #0ca30c;
+  --relleno-aviso: #fab219;
+  --relleno-malo: #d03b3b;
+  --relleno-pendiente: #a7b0bd;
+
   --radio: 10px;
   --sombra: 0 1px 2px rgba(15, 27, 45, 0.06), 0 1px 3px rgba(15, 27, 45, 0.04);
   --fuente: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -75,6 +86,7 @@
   --prueba: #c5b0f5;
   --prueba-bg: #2a2340;
   --prueba-borde: #4d3f7a;
+  --relleno-pendiente: #56647a;
   --sombra: none;
 }
 
@@ -442,10 +454,6 @@ button, input { font-family: inherit; }
 .eje-rejilla { stroke: var(--rejilla); stroke-width: 1; }
 .eje-base { stroke: var(--linea); stroke-width: 1; }
 .eje-texto { fill: var(--texto-tenue); font-size: 11px; font-variant-numeric: tabular-nums; }
-.columna { fill: var(--serie); transition: fill 0.12s; }
-.columna-hoy { fill: var(--serie-hoy); }
-.columna-activa { fill: var(--serie-hover); }
-.columna-hoy.columna-activa { fill: var(--naranja-hover); }
 .columna-valor { fill: var(--texto); font-size: 12px; font-weight: 600; }
 .columna-hit { fill: transparent; cursor: default; outline: none; }
 .columna-hit:focus-visible { fill: var(--superficie-2); fill-opacity: 0.6; }
@@ -472,9 +480,77 @@ button, input { font-family: inherit; }
 .tooltip strong { font-size: 0.9rem; }
 .tooltip span { color: #c3cfdf; }
 
+/* Segmentos apilados por estado de validación (etapa 3A) */
+.seg-aprobado, .muestra-aprobado, .muestra-conforme { fill: var(--relleno-bueno); background: var(--relleno-bueno); }
+.seg-observado, .muestra-observado, .muestra-observado-fisico { fill: var(--relleno-aviso); background: var(--relleno-aviso); }
+.seg-rechazado, .muestra-rechazado, .muestra-defectuoso { fill: var(--relleno-malo); background: var(--relleno-malo); }
+.seg-pendiente, .muestra-pendiente { fill: var(--relleno-pendiente); background: var(--relleno-pendiente); }
+.banda-activa { fill: var(--superficie-2); }
+.eje-texto-hoy { fill: var(--texto); font-weight: 600; }
+
+.leyenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  list-style: none;
+  margin: 0 0 0.6rem;
+  padding: 0;
+  font-size: 0.8rem;
+  color: var(--texto-2);
+}
+.leyenda li { display: inline-flex; align-items: center; gap: 0.4rem; }
+.muestra { display: inline-block; width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.tooltip .tooltip-fila { display: inline-flex; align-items: center; gap: 0.4rem; color: #e8edf5; }
+
+/* ---------- Producción validada (etapa 3A) ---------- */
+
+.val-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin-bottom: 1.1rem;
+}
+.val-kpis .kpi { box-shadow: none; background: var(--superficie-2); }
+.kpi-validada { border-top: 3px solid var(--relleno-bueno); }
+
+.composiciones { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem 2rem; }
+.composicion { min-width: 0; }
+.composicion h3 { margin: 0 0 0.55rem; font-size: 0.9rem; font-weight: 600; color: var(--texto); }
+
+.barra-composicion {
+  display: flex;
+  gap: 2px; /* hueco en el color de la superficie entre segmentos */
+  height: 18px;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+.barra-seg { flex-basis: 0; min-width: 3px; }
+.barra-vacia {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 0 0.6rem;
+  background: var(--superficie-2);
+  border: 1px dashed var(--linea);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  color: var(--texto-tenue);
+}
+
+.tabla-composicion { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.tabla-composicion th, .tabla-composicion td { padding: 0.35rem 0.4rem; border-bottom: 1px solid var(--linea); }
+.tabla-composicion th { text-align: left; font-weight: 500; color: var(--texto-2); }
+.tabla-composicion th .muestra { margin-right: 0.5rem; vertical-align: -1px; }
+.tabla-composicion .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tabla-composicion .fuerte { font-weight: 600; color: var(--texto); }
+
+.nota-comprobacion { font-size: 0.82rem; color: var(--ok); margin: 1rem 0 0.3rem; }
+
 .tabla-simple { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
 .tabla-simple th, .tabla-simple td { padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--linea); text-align: left; }
 .tabla-simple th { color: var(--texto-tenue); font-weight: 500; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.tabla-simple .num { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* ---------- Cámaras ---------- */
 
@@ -875,11 +951,17 @@ button, input { font-family: inherit; }
   .grafico-acciones { margin-top: 0; }
 }
 
+@media (max-width: 1100px) {
+  .val-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .composiciones { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 600px) {
   .kpis { grid-template-columns: 1fr 1fr; gap: 0.6rem; }
   .kpi-hero { grid-column: span 2; grid-row: auto; }
   .kpi { padding: 0.85rem; }
   .kpi-valor { font-size: 1.5rem; }
+  .val-kpis { grid-template-columns: 1fr 1fr; gap: 0.6rem; }
   .segmentado { width: 100%; }
   .segmentado button { flex: 1; }
   .page-head {
@@ -923,5 +1005,4 @@ button, input { font-family: inherit; }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .columna { transition: none; }
 }

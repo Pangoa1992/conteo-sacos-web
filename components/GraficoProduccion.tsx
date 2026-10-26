@@ -1,12 +1,28 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { ETIQUETA_ESTADO_VALIDACION, type EstadoValidacion } from "@/lib/conteos";
 
 export type DiaProduccion = {
   fecha: string; // YYYY-MM-DD (hora de la planta)
-  totalSacos: number;
+  totalSacos: number; // total detectado por la IA (suma de porEstado)
   registros: number;
+  porEstado: Record<EstadoValidacion, number>; // sacos detectados según el estado del lote
 };
+
+// Orden de la pila desde la base: lo validado abajo, lo pendiente arriba.
+export const ORDEN_PILA: EstadoValidacion[] = ["aprobado", "observado", "rechazado", "pendiente"];
+
+/** Leyenda de estados: muestra de color + texto (el color nunca va solo). */
+export function LeyendaEstados({ estados = ORDEN_PILA }: { estados?: EstadoValidacion[] }) {
+  return (
+    <ul className="leyenda" aria-label="Estado de validación">
+      {estados.map((e) => (
+        <li key={e}><span className={`muestra muestra-${e}`} aria-hidden="true" />{ETIQUETA_ESTADO_VALIDACION[e]}</li>
+      ))}
+    </ul>
+  );
+}
 
 type Props = {
   dias: DiaProduccion[]; // cronológico, el último es "hoy"
@@ -24,6 +40,7 @@ const ANCHO_MAX_COLUMNA = 24;
 const RADIO = 4;
 const ESPACIO_ETIQUETA_X = 52; // px mínimos por etiqueta de fecha ("24/10")
 const MEDIO_TOOLTIP = 72; // si la columna está más cerca del borde, el tooltip se alinea hacia dentro
+const HUECO = 2; // separación entre segmentos apilados, en el color de la superficie
 
 const fmt = (n: number) => n.toLocaleString("es-PE");
 
@@ -44,16 +61,17 @@ function escalaEje(max: number): number[] {
   return marcas;
 }
 
-/** Columna con punta redondeada (4px) y base recta. */
-function rutaColumna(x: number, y: number, w: number, h: number): string {
-  const r = Math.min(RADIO, h, w / 2);
+/** Columna con punta redondeada (4px, o el radio indicado) y base recta. */
+function rutaColumna(x: number, y: number, w: number, h: number, radio = RADIO): string {
+  const r = Math.min(radio, h, w / 2);
   if (h <= 0) return "";
   return `M${x},${y + h} V${y + r} Q${x},${y} ${x + r},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h} Z`;
 }
 
 /**
- * Producción diaria (sacos por día). Una sola serie: el título la nombra,
- * no lleva leyenda. El día actual se resalta con el acento y su valor.
+ * Producción diaria (sacos por día). La altura de cada columna es el total
+ * detectado por la IA; los segmentos lo reparten según el estado de
+ * validación de cada lote (leyenda arriba). El día actual lleva su total.
  * Tooltip en hover y en foco de teclado; la tabla equivalente está
  * siempre disponible con "Ver tabla".
  */
@@ -98,22 +116,31 @@ export function GraficoProduccion({ dias, hoy }: Props) {
           {verTabla ? "Ver gráfico" : "Ver tabla"}
         </button>
       </div>
+      {!verTabla && <LeyendaEstados />}
 
       {verTabla ? (
-        <table className="tabla-simple">
-          <thead>
-            <tr><th>Día</th><th className="num">Sacos</th><th className="num">Registros</th></tr>
-          </thead>
-          <tbody>
-            {[...dias].reverse().map((d) => (
-              <tr key={d.fecha}>
-                <td>{etiquetaDia(d.fecha)}{d.fecha === hoy ? " (hoy)" : ""}</td>
-                <td className="num">{fmt(d.totalSacos)}</td>
-                <td className="num">{d.registros}</td>
+        <div className="tabla-scroll">
+          <table className="tabla-simple">
+            <thead>
+              <tr>
+                <th>Día</th>
+                <th className="num">Detectado (IA)</th>
+                {ORDEN_PILA.map((e) => <th key={e} className="num">{ETIQUETA_ESTADO_VALIDACION[e]}</th>)}
+                <th className="num">Registros</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {[...dias].reverse().map((d) => (
+                <tr key={d.fecha}>
+                  <td>{etiquetaDia(d.fecha)}{d.fecha === hoy ? " (hoy)" : ""}</td>
+                  <td className="num">{fmt(d.totalSacos)}</td>
+                  {ORDEN_PILA.map((e) => <td key={e} className="num">{fmt(d.porEstado[e])}</td>)}
+                  <td className="num">{d.registros}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : (
         <div className="grafico-lienzo" ref={lienzoRef} onPointerLeave={() => setActivo(null)}>
           {sinDatos && <p className="grafico-vacio">Sin conteos registrados en este periodo.</p>}
@@ -135,19 +162,35 @@ export function GraficoProduccion({ dias, hoy }: Props) {
               // Se cuenta hacia atrás desde hoy; se omite la vecina inmediata de "Hoy" para que no se encimen.
               const desdeHoy = dias.length - 1 - i;
               const mostrarEtiqueta = desdeHoy % pasoEtiqueta === 0 && (desdeHoy === 0 || desdeHoy >= Math.min(2, pasoEtiqueta));
+              // Segmentos desde la base; solo el superior lleva la punta redondeada.
+              const visibles = ORDEN_PILA.filter((e) => d.porEstado[e] > 0);
+              let acumulado = 0;
               return (
                 <g key={d.fecha}>
-                  <path
-                    d={rutaColumna(xCol, yCol, anchoCol, MARGEN.arriba + altoPlot - yCol)}
-                    className={`columna ${esHoy ? "columna-hoy" : ""} ${activo === i ? "columna-activa" : ""}`}
-                  />
+                  {activo === i && (
+                    <rect x={xBanda} y={MARGEN.arriba} width={banda} height={altoPlot} className="banda-activa" />
+                  )}
+                  {visibles.map((e, k) => {
+                    const yBase = y(acumulado);
+                    acumulado += d.porEstado[e];
+                    const yTope = y(acumulado);
+                    const alto = Math.max(1, yBase - yTope - (k > 0 ? HUECO : 0));
+                    const esTope = k === visibles.length - 1;
+                    return (
+                      <path
+                        key={e}
+                        d={rutaColumna(xCol, yTope, anchoCol, alto, esTope ? RADIO : 0)}
+                        className={`segmento seg-${e}`}
+                      />
+                    );
+                  })}
                   {esHoy && d.totalSacos > 0 && activo !== i && (
                     <text x={xCol + anchoCol / 2} y={yCol - 8} className="columna-valor" textAnchor="middle">
                       {fmt(d.totalSacos)}
                     </text>
                   )}
                   {(mostrarEtiqueta || esHoy) && (
-                    <text x={xBanda + banda / 2} y={altoGrafico - 10} className="eje-texto" textAnchor="middle">
+                    <text x={xBanda + banda / 2} y={altoGrafico - 10} className={`eje-texto ${esHoy ? "eje-texto-hoy" : ""}`} textAnchor="middle">
                       {esHoy ? "Hoy" : etiquetaDia(d.fecha)}
                     </text>
                   )}
@@ -159,7 +202,8 @@ export function GraficoProduccion({ dias, hoy }: Props) {
                     height={altoPlot}
                     className="columna-hit"
                     tabIndex={0}
-                    aria-label={`${etiquetaDia(d.fecha)}: ${fmt(d.totalSacos)} sacos en ${d.registros} registros`}
+                    aria-label={`${etiquetaDia(d.fecha)}: ${fmt(d.totalSacos)} sacos detectados en ${d.registros} registros${
+                      visibles.length ? "; " + visibles.map((e) => `${ETIQUETA_ESTADO_VALIDACION[e].toLowerCase()} ${fmt(d.porEstado[e])}`).join(", ") : ""}`}
                     onPointerEnter={() => setActivo(i)}
                     onFocus={() => setActivo(i)}
                     onBlur={() => setActivo(null)}
@@ -185,11 +229,17 @@ export function GraficoProduccion({ dias, hoy }: Props) {
               }}
               role="status"
             >
-              <strong>{fmt(diaActivo.totalSacos)} sacos</strong>
+              <strong>{fmt(diaActivo.totalSacos)} sacos detectados</strong>
               <span>
                 {diaActivo.fecha === hoy ? "Hoy" : etiquetaDia(diaActivo.fecha)} · {diaActivo.registros} registro
                 {diaActivo.registros !== 1 ? "s" : ""}
               </span>
+              {[...ORDEN_PILA].reverse().filter((e) => diaActivo.porEstado[e] > 0).map((e) => (
+                <span key={e} className="tooltip-fila">
+                  <span className={`muestra muestra-${e}`} aria-hidden="true" />
+                  {ETIQUETA_ESTADO_VALIDACION[e]}: {fmt(diaActivo.porEstado[e])}
+                </span>
+              ))}
             </div>
           )}
         </div>

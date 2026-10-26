@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { conteos } from "@/db/schema";
 import { sql } from "drizzle-orm";
-import { ZONA_HORARIA_PLANTA } from "@/lib/conteos";
+import { ZONA_HORARIA_PLANTA, type EstadoValidacion } from "@/lib/conteos";
 
 // Sin esto, Next 14 trata este GET (no lee la petición) como estático y en el
 // build lo congela con los datos de ese momento.
@@ -19,6 +19,19 @@ const FECHA_PLANTA = sql`((${FECHA_CONTEO} at time zone 'UTC') at time zone ${sq
 const HOY_PLANTA = sql`(now() at time zone ${sql.raw(`'${ZONA_HORARIA_PLANTA}'`)})::date`;
 const ES_PRUEBA = sql`(lower(${conteos.origen}) like 'prueba%')`;
 
+// Columnas de producción validada (etapa 3A). La clasificación manual solo se
+// suma en lotes aprobados; el total detectado por la IA se suma en todos.
+const SOLO_APROBADOS = sql`filter (where ${conteos.estadoValidacion} = 'aprobado')`;
+const COLUMNAS_VALIDACION = {
+  esPrueba: sql<boolean>`${ES_PRUEBA}`,
+  estado: sql<EstadoValidacion>`${conteos.estadoValidacion}`,
+  registros: sql<number>`count(*)::int`,
+  totalSacos: sql<number>`coalesce(sum(${conteos.cantidadSacos}), 0)::int`,
+  sacosConformes: sql<number>`coalesce(sum(${conteos.sacosConformes}) ${SOLO_APROBADOS}, 0)::int`,
+  sacosObservados: sql<number>`coalesce(sum(${conteos.sacosObservados}) ${SOLO_APROBADOS}, 0)::int`,
+  sacosDefectuosos: sql<number>`coalesce(sum(${conteos.sacosDefectuosos}) ${SOLO_APROBADOS}, 0)::int`,
+};
+
 /**
  * GET /api/conteo/resumen
  * Indicadores agregados para el dashboard (solo lectura, requiere sesión
@@ -26,11 +39,14 @@ const ES_PRUEBA = sql`(lower(${conteos.origen}) like 'prueba%')`;
  *   - hoy: fecha de la planta (America/Lima).
  *   - diario: total de sacos y nº de registros por día, últimos 14 días.
  *   - fuentes: último conteo (fecha real) de cada cámara/origen.
+ *   - diarioPorEstado: lo mismo que diario, separado por estado de validación
+ *     y con la clasificación manual de los lotes aprobados.
+ *   - validacion: totales por estado de todo el historial (producción validada).
  * No calcula ni estima nada que no esté en la base de datos.
  */
 export async function GET(_req: NextRequest) {
   if (!process.env.DATABASE_URL) {
-    return NextResponse.json({ modoSimulado: true, hoy: null, diario: [], fuentes: [] });
+    return NextResponse.json({ modoSimulado: true, hoy: null, diario: [], diarioPorEstado: [], validacion: [], fuentes: [] });
   }
 
   const [{ hoy }] = await db.execute<{ hoy: string }>(sql`select ${HOY_PLANTA}::text as hoy`);
@@ -46,6 +62,19 @@ export async function GET(_req: NextRequest) {
     .where(sql`${FECHA_PLANTA} > ${HOY_PLANTA} - ${DIAS_SERIE}::int`)
     .groupBy(sql`1`, sql`2`)
     .orderBy(sql`1`);
+
+  const diarioPorEstado = await db
+    .select({ fecha: sql<string>`${FECHA_PLANTA}::text`, ...COLUMNAS_VALIDACION })
+    .from(conteos)
+    .where(sql`${FECHA_PLANTA} > ${HOY_PLANTA} - ${DIAS_SERIE}::int`)
+    .groupBy(sql`1`, sql`2`, sql`3`)
+    .orderBy(sql`1`, sql`2`, sql`3`);
+
+  const validacion = await db
+    .select(COLUMNAS_VALIDACION)
+    .from(conteos)
+    .groupBy(sql`1`, sql`2`)
+    .orderBy(sql`1`, sql`2`);
 
   const fuentes = await db
     .select({
@@ -65,6 +94,8 @@ export async function GET(_req: NextRequest) {
     hoy,
     diasSerie: DIAS_SERIE,
     diario,
+    diarioPorEstado,
+    validacion,
     fuentes,
   });
 }

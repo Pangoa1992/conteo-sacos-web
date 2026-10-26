@@ -1,13 +1,15 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { VentasModule } from "./VentasModule";
 import { ReporteContratistaModule } from "./ReporteContratistaModule";
 import { GraficoProduccion, etiquetaDia, type DiaProduccion } from "./GraficoProduccion";
+import { ProduccionValidada, type FilaValidacionDiaria } from "./ProduccionValidada";
 import { BadgeValidacion, ValidacionConteo } from "./ValidacionConteo";
 import { EvidenciasConteo } from "./EvidenciasConteo";
 import { ESTADOS_VALIDACION, ETIQUETA_ESTADO_VALIDACION, type EstadoValidacion } from "@/lib/conteos";
+import type { FilaValidacion } from "@/lib/produccion-validada";
 
 export type Conteo = {
   id: number;
@@ -31,9 +33,14 @@ export type Conteo = {
   observacionValidacion?: string | null;
 };
 
-type FilaDiaria = { fecha: string; esPrueba: boolean; totalSacos: number; registros: number };
 type Fuente = { fuenteCamara: string | null; esPrueba: boolean; ultimoRegistro: string; registros: number };
-type Resumen = { hoy: string | null; diasSerie?: number; diario: FilaDiaria[]; fuentes: Fuente[] };
+type Resumen = {
+  hoy: string | null;
+  diasSerie?: number;
+  diarioPorEstado?: FilaValidacionDiaria[];
+  validacion?: FilaValidacion[];
+  fuentes: Fuente[];
+};
 
 type Usuario = {
   id: number;
@@ -166,7 +173,7 @@ export function Dashboard() {
 
   // En modo simulado (sin BD) todo se trata como dato de prueba.
   const esPrueba = (c: { esPrueba?: boolean }) => modoSimulado || !!c.esPrueba;
-  const enVista = (prueba: boolean) => vista === "todos" || (vista === "prueba") === prueba;
+  const enVista = useCallback((prueba: boolean) => vista === "todos" || (vista === "prueba") === prueba, [vista]);
 
   const conteosVista = useMemo(() => conteos.filter((c) => enVista(esPrueba(c))), [conteos, vista, modoSimulado]);
   const ultimo = conteosVista[0];
@@ -174,6 +181,7 @@ export function Dashboard() {
   const cantidadPrueba = conteos.filter((c) => esPrueba(c)).length;
 
   // ---- Producción diaria (desde /api/conteo/resumen, agregada en la BD) ----
+  // El total del día es lo detectado por la IA; se reparte por estado de validación.
   const hoy = resumen?.hoy ?? null;
   const diasSerie = resumen?.diasSerie ?? 14;
   const dias: DiaProduccion[] = useMemo(() => {
@@ -181,17 +189,18 @@ export function Dashboard() {
     const porFecha = new Map<string, DiaProduccion>();
     for (let i = diasSerie - 1; i >= 0; i--) {
       const fecha = sumarDias(hoy, -i);
-      porFecha.set(fecha, { fecha, totalSacos: 0, registros: 0 });
+      porFecha.set(fecha, { fecha, totalSacos: 0, registros: 0, porEstado: { pendiente: 0, aprobado: 0, observado: 0, rechazado: 0 } });
     }
-    for (const fila of resumen?.diario ?? []) {
+    for (const fila of resumen?.diarioPorEstado ?? []) {
       const dia = porFecha.get(fila.fecha);
-      if (dia && enVista(fila.esPrueba)) {
+      if (dia && enVista(fila.esPrueba) && fila.estado in dia.porEstado) {
         dia.totalSacos += fila.totalSacos;
         dia.registros += fila.registros;
+        dia.porEstado[fila.estado] += fila.totalSacos;
       }
     }
     return [...porFecha.values()];
-  }, [resumen, hoy, diasSerie, vista]);
+  }, [resumen, hoy, diasSerie, enVista]);
 
   const produccionHoy = dias.find((d) => d.fecha === hoy);
   const ultimos7 = dias.slice(-7).reduce((s, d) => s + d.totalSacos, 0);
@@ -272,6 +281,7 @@ export function Dashboard() {
 
   const secciones = [
     { id: "resumen", texto: "Resumen" },
+    { id: "validada", texto: "Producción validada" },
     { id: "produccion", texto: "Producción diaria" },
     { id: "camaras", texto: "Cámaras" },
     { id: "historial", texto: "Historial" },
@@ -484,6 +494,17 @@ export function Dashboard() {
           </div>
         </section>
 
+        {/* ---- Producción validada (etapa 3A) ---- */}
+        <ProduccionValidada
+          validacion={modoSimulado ? [] : resumen?.validacion ?? []}
+          diarioPorEstado={modoSimulado ? [] : resumen?.diarioPorEstado ?? []}
+          hoy={hoy}
+          incluir={enVista}
+          esVistaPrueba={vista !== "real"}
+          etiquetaVista={etiquetaVista}
+          cargando={cargando}
+        />
+
         {/* ---- Producción diaria ---- */}
         <section className="tarjeta" id="produccion">
           {/* Foto de la planta (#81): decorativa, se carga al acercarse a la sección */}
@@ -501,7 +522,7 @@ export function Dashboard() {
           <div className="tarjeta-head">
             <div>
               <h2>Producción diaria</h2>
-              <p className="tarjeta-sub">Sacos contados por día · últimos {diasSerie} días · hora de Lima · {etiquetaVista.toLowerCase()}</p>
+              <p className="tarjeta-sub">Sacos detectados por la IA cada día, según el estado de validación del lote · últimos {diasSerie} días · hora de Lima · {etiquetaVista.toLowerCase()}</p>
             </div>
           </div>
           {dias.length > 0 ? <GraficoProduccion dias={dias} hoy={hoy} /> : <p className="vacio">Sin datos de producción.</p>}
