@@ -39,6 +39,8 @@
   --ok-bg: #e7f5ee;
   --info: #1450b4;
   --info-bg: #eaf1fc;
+  --aviso: #8a4b00;
+  --aviso-bg: #fff3df;
 
   /* Datos de prueba (no es un estado ni una serie) */
   --prueba: #5b3fa0;
@@ -68,6 +70,8 @@
   --ok-bg: #15302a;
   --info: #86abf3;
   --info-bg: #16263f;
+  --aviso: #f2b65c;
+  --aviso-bg: #3a2a12;
   --prueba: #c5b0f5;
   --prueba-bg: #2a2340;
   --prueba-borde: #4d3f7a;
@@ -500,7 +504,7 @@ button, input { font-family: inherit; }
   margin-bottom: 0.85rem;
 }
 
-.filtro-input, .filtro-fecha input, .campo input {
+.filtro-input, .filtro-fecha input, .filtro-fecha select, .campo input, .campo textarea {
   border: 1px solid var(--linea);
   background: var(--superficie);
   color: var(--texto);
@@ -566,6 +570,12 @@ button, input { font-family: inherit; }
 }
 .badge-critico { background: var(--critico-bg); color: var(--critico); }
 .badge-ok { background: var(--ok-bg); color: var(--ok); }
+
+/* Estado de validación: el color acompaña siempre al texto (no es la única señal) */
+.badge-val-pendiente { background: var(--superficie-2); color: var(--texto-2); border: 1px solid var(--linea); }
+.badge-val-aprobado { background: var(--ok-bg); color: var(--ok); }
+.badge-val-observado { background: var(--aviso-bg); color: var(--aviso); }
+.badge-val-rechazado { background: var(--critico-bg); color: var(--critico); }
 
 /* ---------- Tablas ---------- */
 
@@ -651,6 +661,52 @@ button, input { font-family: inherit; }
 .total-estimado { margin: 0 0 0.55rem; font-size: 0.9rem; color: var(--texto-2); }
 
 .mensaje { font-size: 0.86rem; margin: 0 0 0.9rem; }
+.mensaje ul { margin: 0; padding-left: 1.1rem; }
+.campo-bloque { flex: 1 1 100%; margin-bottom: 0.75rem; }
+.campo textarea { width: 100%; max-width: 640px; font-family: inherit; resize: vertical; }
+
+/* ---------- Validación de conteos (fila expandida del historial) ---------- */
+
+.validacion {
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--linea);
+}
+.validacion-head { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.6rem; }
+.validacion-head h3 { margin: 0; font-size: 0.95rem; font-weight: 600; }
+.validacion-texto { font-size: 0.86rem; margin: 0 0 0.6rem; }
+.validacion-nota {
+  font-size: 0.78rem;
+  color: var(--texto-tenue);
+  margin: 0.6rem 0 0.9rem;
+  line-height: 1.45;
+}
+.validacion-form fieldset { border: none; padding: 0; margin: 0 0 0.75rem; min-width: 0; }
+.validacion .mensaje { margin-top: 0.7rem; }
+.validacion-form legend { font-size: 0.8rem; color: var(--texto-2); margin-bottom: 0.4rem; padding: 0; }
+.validacion-estados { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.validacion-estados legend { flex-basis: 100%; }
+.opcion-estado {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.86rem;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--linea);
+  border-radius: 6px;
+  background: var(--superficie);
+  cursor: pointer;
+}
+.opcion-estado.activa { border-color: var(--azul-marca); box-shadow: inset 0 0 0 1px var(--azul-marca); }
+[data-theme="oscuro"] .opcion-estado.activa { border-color: var(--serie); box-shadow: inset 0 0 0 1px var(--serie); }
+.validacion-clasificacion .formulario { margin-bottom: 0.4rem; }
+.validacion-clasificacion .campo input { width: 110px; }
+.validacion-suma { font-size: 0.84rem; margin: 0; font-variant-numeric: tabular-nums; }
+.suma-ok { color: var(--ok); }
+.suma-error { color: var(--critico); font-weight: 500; }
+.validacion-historial h4 { margin: 0.9rem 0 0.4rem; font-size: 0.82rem; font-weight: 600; color: var(--texto-2); }
+.validacion-historial ol { margin: 0; padding-left: 1.2rem; font-size: 0.82rem; line-height: 1.7; }
+.validacion-historial p { font-size: 0.82rem; margin: 0; }
 .mensaje-ok { color: var(--ok); }
 .mensaje-error { color: var(--critico); }
 
@@ -795,6 +851,8 @@ button, input { font-family: inherit; }
   .filtro-input { min-width: 0; }
   .campo input, .campo-ancho input { width: 100%; }
   .campo, .campo-ancho { flex: 1 1 100%; }
+  .validacion-clasificacion .campo { flex: 1 1 30%; }
+  .validacion-clasificacion .campo input { width: 100%; }
 
   /* Tablas como tarjetas apiladas */
   .historial thead { display: none; }

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import twilio from "twilio";
 import { db } from "@/db";
 import { conteos } from "@/db/schema";
-import { desc } from "drizzle-orm";
+import { desc, sql } from "drizzle-orm";
+import { ETIQUETA_ESTADO_VALIDACION, ZONA_HORARIA_PLANTA, type EstadoValidacion } from "@/lib/conteos";
 
 /**
  * POST /api/whatsapp/webhook
@@ -68,25 +69,34 @@ async function construirRespuesta(mensaje: string): Promise<string> {
       return "El sistema aún no está conectado a la base de datos real. (Modo de prueba)";
     }
 
+    // Solo conteos reales: los de prueba (origen "prueba*", mismo criterio que
+    // esOrigenPrueba) nunca se informan al dueño. Se ordena por la fecha real
+    // del lote (contado_en); los registros antiguos sin ella usan la de recepción.
     const [ultimo] = await db
       .select()
       .from(conteos)
-      .orderBy(desc(conteos.creadoEn))
+      .where(sql`lower(${conteos.origen}) not like 'prueba%'`)
+      .orderBy(desc(sql`coalesce(${conteos.contadoEn}, ${conteos.creadoEn})`), desc(conteos.id))
       .limit(1);
 
     if (!ultimo) {
-      return "Todavía no hay ningún conteo registrado.";
+      return "Todavía no hay ningún conteo real registrado.";
     }
 
-    const fecha = new Date(ultimo.creadoEn).toLocaleString("es-PE", {
+    // Hora de la planta, no la del servidor (en Vercel el servidor está en UTC).
+    const fecha = (ultimo.contadoEn ?? ultimo.creadoEn).toLocaleString("es-PE", {
       dateStyle: "short",
       timeStyle: "short",
+      timeZone: ZONA_HORARIA_PLANTA,
     });
+    const confianza = ultimo.confianzaPromedio == null ? "No disponible" : `${ultimo.confianzaPromedio}%`;
+    const validacion = ETIQUETA_ESTADO_VALIDACION[ultimo.estadoValidacion as EstadoValidacion] ?? ultimo.estadoValidacion;
 
     return (
       `📦 Último conteo: *${ultimo.cantidadSacos} sacos*\n` +
-      `🕐 Registrado: ${fecha}\n` +
-      `✅ Confianza: ${ultimo.confianzaPromedio ?? "—"}%`
+      `🕐 Contado: ${fecha}\n` +
+      `✅ Confianza: ${confianza}\n` +
+      `📋 Validación: ${validacion}`
     );
   }
 

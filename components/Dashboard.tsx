@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { VentasModule } from "./VentasModule";
 import { ReporteContratistaModule } from "./ReporteContratistaModule";
 import { GraficoProduccion, etiquetaDia, type DiaProduccion } from "./GraficoProduccion";
+import { BadgeValidacion, ValidacionConteo } from "./ValidacionConteo";
+import { ESTADOS_VALIDACION, ETIQUETA_ESTADO_VALIDACION, type EstadoValidacion } from "@/lib/conteos";
 
 export type Conteo = {
   id: number;
@@ -18,6 +20,14 @@ export type Conteo = {
   fechaConteo?: string; // contadoEn o, si no existe, creadoEn
   reporteContratista?: { cantidadReportada: number; nombreContratista?: string | null } | null;
   discrepancia?: boolean;
+  // Validación por el personal (los datos simulados no la traen: se tratan como pendiente)
+  estadoValidacion?: EstadoValidacion;
+  sacosConformes?: number | null;
+  sacosObservados?: number | null;
+  sacosDefectuosos?: number | null;
+  validadoPorNombre?: string | null;
+  validadoEn?: string | null;
+  observacionValidacion?: string | null;
 };
 
 type FilaDiaria = { fecha: string; esPrueba: boolean; totalSacos: number; registros: number };
@@ -98,6 +108,7 @@ export function Dashboard() {
   const [filtroDesde, setFiltroDesde] = useState("");
   const [filtroHasta, setFiltroHasta] = useState("");
   const [soloDiscrepancias, setSoloDiscrepancias] = useState(false);
+  const [filtroValidacion, setFiltroValidacion] = useState<EstadoValidacion | "">("");
 
   async function cargar() {
     try {
@@ -192,24 +203,28 @@ export function Dashboard() {
 
   const discrepanciasVista = conteosVista.filter((c) => c.discrepancia).length;
   const fuentesVista = (resumen?.fuentes ?? []).filter((f) => enVista(f.esPrueba));
+  const estadoDe = (c: Conteo): EstadoValidacion => c.estadoValidacion ?? "pendiente";
+  const pendientesVista = conteosVista.filter((c) => estadoDe(c) === "pendiente").length;
 
   // ---- Historial con filtros ----
   const conteosFiltrados = useMemo(() => {
     return conteosVista.filter((c) => {
       if (soloDiscrepancias && !c.discrepancia) return false;
+      if (filtroValidacion && estadoDe(c) !== filtroValidacion) return false;
       if (filtroCamara && !(c.fuenteCamara ?? "").toLowerCase().includes(filtroCamara.toLowerCase())) return false;
       const fecha = new Date(fechaDe(c));
       if (filtroDesde && fecha < new Date(`${filtroDesde}T00:00:00`)) return false;
       if (filtroHasta && fecha > new Date(`${filtroHasta}T23:59:59.999`)) return false;
       return true;
     });
-  }, [conteosVista, filtroCamara, filtroDesde, filtroHasta, soloDiscrepancias]);
+  }, [conteosVista, filtroCamara, filtroDesde, filtroHasta, soloDiscrepancias, filtroValidacion]);
 
   const totalFiltrado = conteosFiltrados.reduce((sum, c) => sum + c.cantidadSacos, 0);
   const hayDiscrepanciasFiltradas = conteosFiltrados.some((c) => c.discrepancia);
 
   function exportarCSV() {
-    const encabezado = ["ID", "Fecha", "Hora", "Sacos", "Tipo", "Camara/Origen", "Confianza (%)", "Contratista reporto", "Discrepancia"];
+    const encabezado = ["ID", "Fecha", "Hora", "Sacos", "Tipo", "Camara/Origen", "Confianza (%)", "Contratista reporto", "Discrepancia",
+      "Validacion", "Conformes (manual)", "Observados (manual)", "Defectuosos (manual)", "Validado por", "Fecha validacion", "Observacion"];
     const filas = conteosFiltrados.map((c) => [
       c.id,
       new Date(fechaDe(c)).toLocaleDateString("es-PE"),
@@ -220,6 +235,13 @@ export function Dashboard() {
       confianzaNumerica(c.confianzaPromedio) ?? "",
       c.reporteContratista?.cantidadReportada ?? "",
       c.discrepancia ? "Si" : "No",
+      ETIQUETA_ESTADO_VALIDACION[estadoDe(c)],
+      c.sacosConformes ?? "",
+      c.sacosObservados ?? "",
+      c.sacosDefectuosos ?? "",
+      c.validadoPorNombre ?? "",
+      c.validadoEn ? new Date(c.validadoEn).toLocaleString("es-PE") : "",
+      c.observacionValidacion ?? "",
     ]);
     const csv = [encabezado, ...filas]
       .map((fila) => fila.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
@@ -238,9 +260,10 @@ export function Dashboard() {
     setFiltroDesde("");
     setFiltroHasta("");
     setSoloDiscrepancias(false);
+    setFiltroValidacion("");
   }
 
-  const hayFiltrosActivos = !!(filtroCamara || filtroDesde || filtroHasta || soloDiscrepancias);
+  const hayFiltrosActivos = !!(filtroCamara || filtroDesde || filtroHasta || soloDiscrepancias || filtroValidacion);
   const esAdmin = usuario?.rol === "admin_macromec";
   const conteoParaModulos = ultimo
     ? { id: ultimo.id, cantidadSacos: ultimo.cantidadSacos, creadoEn: fechaDe(ultimo), esPrueba: esPrueba(ultimo) }
@@ -522,6 +545,7 @@ export function Dashboard() {
               <p className="tarjeta-sub">
                 {conteosFiltrados.length} registro{conteosFiltrados.length !== 1 ? "s" : ""} · {fmt(totalFiltrado)} sacos
                 {hayFiltrosActivos ? " (con filtros)" : ""} · últimos {LIMITE_HISTORIAL} como máximo
+                {pendientesVista > 0 && <> · {pendientesVista} pendiente{pendientesVista !== 1 ? "s" : ""} de validación</>}
               </p>
             </div>
             <button onClick={exportarCSV} className="btn-acento" disabled={conteosFiltrados.length === 0}>
@@ -550,6 +574,15 @@ export function Dashboard() {
               <input type="checkbox" checked={soloDiscrepancias} onChange={(e) => setSoloDiscrepancias(e.target.checked)} />
               Solo discrepancias
             </label>
+            <label className="filtro-fecha">
+              Validación
+              <select value={filtroValidacion} onChange={(e) => setFiltroValidacion(e.target.value as EstadoValidacion | "")}>
+                <option value="">Todas</option>
+                {ESTADOS_VALIDACION.map((e) => (
+                  <option key={e} value={e}>{ETIQUETA_ESTADO_VALIDACION[e]}</option>
+                ))}
+              </select>
+            </label>
             {hayFiltrosActivos && (
               <button onClick={limpiarFiltros} className="btn-secundario">Limpiar filtros</button>
             )}
@@ -569,6 +602,7 @@ export function Dashboard() {
                   <th>Cámara / origen</th>
                   <th className="num">Confianza</th>
                   <th>Contratista</th>
+                  <th>Validación</th>
                 </tr>
               </thead>
               <tbody>
@@ -611,10 +645,11 @@ export function Dashboard() {
                             <span className="tenue">sin reporte</span>
                           )}
                         </td>
+                        <td data-label="Validación"><BadgeValidacion estado={estadoDe(c)} /></td>
                       </tr>
                       {expandida && (
                         <tr className="fila-detalle">
-                          <td colSpan={6}>
+                          <td colSpan={7}>
                             <dl className="detalle-grid">
                               <div><dt>ID de registro</dt><dd>{c.id}</dd></div>
                               <div><dt>Fecha del conteo</dt><dd>{c.contadoEn ? new Date(c.contadoEn).toLocaleString("es-PE") : <span className="tenue">No informada (registro anterior)</span>}</dd></div>
@@ -632,10 +667,11 @@ export function Dashboard() {
                                 </dd>
                               </div>
                               <div>
-                                <dt>Estado</dt>
+                                <dt>Comparación con el contratista</dt>
                                 <dd>{c.discrepancia ? "⚠ Discrepancia con el reporte manual" : "✓ Coincide o sin reporte"}</dd>
                               </div>
                             </dl>
+                            {!modoSimulado && <ValidacionConteo conteo={c} esAdmin={esAdmin} onValidado={cargar} />}
                           </td>
                         </tr>
                       )}
@@ -644,7 +680,7 @@ export function Dashboard() {
                 })}
                 {conteosFiltrados.length === 0 && (
                   <tr className="fila-vacia">
-                    <td colSpan={6}>
+                    <td colSpan={7}>
                       {conteosVista.length === 0
                         ? vista === "real" ? "Todavía no hay conteos reales registrados." : "No hay conteos en esta vista."
                         : "Ningún registro coincide con los filtros aplicados."}

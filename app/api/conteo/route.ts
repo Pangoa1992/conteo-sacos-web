@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { conteos, reportesContratista } from "@/db/schema";
+import { conteos, reportesContratista, usuarios } from "@/db/schema";
 import { asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { compararSecreto, extraerBearer } from "@/lib/seguridad";
-import { esOrigenPrueba } from "@/lib/conteos";
+import { esOrigenPrueba, hayDiscrepancia } from "@/lib/conteos";
 
 // Cantidad de conteos que devuelve GET (por defecto y máximo).
 const LIMITE_POR_DEFECTO = 20;
@@ -31,10 +31,6 @@ const conteoInputSchema = z.object({
   contadoEn: z.string().datetime({ offset: true }),
 });
 
-// A partir de esta diferencia entre el conteo automático y el reporte
-// del contratista, se marca como discrepancia (alerta) — Fase 2.
-const UMBRAL_DISCREPANCIA = 1;
-
 /**
  * GET /api/conteo
  * Devuelve los últimos conteos registrados, junto con el reporte del
@@ -46,6 +42,7 @@ const UMBRAL_DISCREPANCIA = 1;
  * nunca mezcle datos de prueba con producción real, y fechaConteo: la
  * fecha real del lote (contadoEn) o, si no la tiene, la de recepción. Si hay varios
  * reportes de contratista para un conteo, se usa el más reciente.
+ * También incluye el estado de validación y el nombre de quien lo revisó.
  *
  * NOTA: si la base de datos no está configurada, se devuelven datos
  * simulados (mock) marcados con modoSimulado: true.
@@ -65,11 +62,13 @@ export async function GET(req: NextRequest) {
 
   // Orden por fecha real del lote (contado_en); los registros antiguos sin
   // ella usan la fecha de recepción.
-  const ultimos = await db
-    .select()
+  const filas = await db
+    .select({ conteo: conteos, validadoPorNombre: usuarios.nombre })
     .from(conteos)
+    .leftJoin(usuarios, eq(conteos.validadoPor, usuarios.id))
     .orderBy(desc(sql`coalesce(${conteos.contadoEn}, ${conteos.creadoEn})`), desc(conteos.id))
     .limit(limite);
+  const ultimos = filas.map((f) => ({ ...f.conteo, validadoPorNombre: f.validadoPorNombre }));
 
   // Una sola consulta para todos los reportes (antes: una por conteo).
   const reportes = ultimos.length
@@ -83,9 +82,7 @@ export async function GET(req: NextRequest) {
 
   const conteosConAlerta = ultimos.map((c) => {
     const reporte = reportePorConteo.get(c.id);
-    const discrepancia = reporte
-      ? Math.abs(reporte.cantidadReportada - c.cantidadSacos) > UMBRAL_DISCREPANCIA
-      : false;
+    const discrepancia = reporte ? hayDiscrepancia(reporte.cantidadReportada, c.cantidadSacos) : false;
 
     return {
       ...c,

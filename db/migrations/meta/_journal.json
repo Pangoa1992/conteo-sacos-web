@@ -22,6 +22,13 @@
       "when": 1792937285725,
       "tag": "0002_fase4_idempotencia",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793023979769,
+      "tag": "0003_etapa1_validacion",
+      "breakpoints": true
     }
   ]
 }

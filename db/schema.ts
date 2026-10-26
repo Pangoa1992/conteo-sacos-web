@@ -16,6 +16,38 @@ export const conteos = pgTable("conteos", {
   // Fecha real del conteo en el detector (UTC). creadoEn es la fecha de recepción.
   contadoEn: timestamp("contado_en"),
   creadoEn: timestamp("creado_en").notNull().defaultNow(),
+
+  // ---- Validación por el personal (etapa 1, ampliación del prototipo) ----
+  // Estado vigente; el detalle de cada revisión queda en validaciones_conteo.
+  // pendiente | aprobado | observado | rechazado
+  estadoValidacion: varchar("estado_validacion", { length: 20 }).notNull().default("pendiente"),
+  // Clasificación MANUAL por estado físico. NULL = sin clasificar (nunca se
+  // inventa). Si existe, las tres suman exactamente cantidadSacos.
+  sacosConformes: integer("sacos_conformes"),
+  sacosObservados: integer("sacos_observados"),
+  sacosDefectuosos: integer("sacos_defectuosos"),
+  validadoPor: integer("validado_por").references(() => usuarios.id),
+  validadoEn: timestamp("validado_en"),
+  observacionValidacion: varchar("observacion_validacion", { length: 500 }),
+  // Las reglas entre estas columnas son restricciones CHECK escritas a mano en
+  // la migración 0003 (drizzle-kit 0.24 no las genera).
+});
+
+/**
+ * Historial de validaciones: una fila por cada revisión de un conteo (solo se
+ * agrega, nunca se modifica), para saber quién cambió el estado, cuándo y por qué.
+ */
+export const validacionesConteo = pgTable("validaciones_conteo", {
+  id: serial("id").primaryKey(),
+  conteoId: integer("conteo_id").references(() => conteos.id).notNull(),
+  estadoAnterior: varchar("estado_anterior", { length: 20 }).notNull(),
+  estado: varchar("estado", { length: 20 }).notNull(),
+  sacosConformes: integer("sacos_conformes"),
+  sacosObservados: integer("sacos_observados"),
+  sacosDefectuosos: integer("sacos_defectuosos"),
+  observacion: varchar("observacion", { length: 500 }),
+  usuarioId: integer("usuario_id").references(() => usuarios.id).notNull(),
+  creadoEn: timestamp("creado_en").notNull().defaultNow(),
 });
 
 /**
