@@ -29,6 +29,13 @@
       "when": 1793023979769,
       "tag": "0003_etapa1_validacion",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793025964216,
+      "tag": "0004_etapa2_evidencias",
+      "breakpoints": true
     }
   ]
 }

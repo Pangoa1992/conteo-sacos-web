@@ -1,4 +1,11 @@
-import { pgTable, serial, integer, varchar, timestamp, boolean, numeric } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, varchar, timestamp, boolean, numeric, char, customType } from "drizzle-orm/pg-core";
+
+// drizzle-orm 0.33 no trae bytea; postgres-js lo entrega como Buffer.
+const bytea = customType<{ data: Buffer }>({
+  dataType() {
+    return "bytea";
+  },
+});
 
 /**
  * Cada registro representa un lote de producción terminado, enviado por el
@@ -85,4 +92,38 @@ export const usuarios = pgTable("usuarios", {
   passwordHash: varchar("password_hash", { length: 255 }).notNull(),
   rol: varchar("rol", { length: 30 }).notNull().default("cliente"), // admin_macromec | cliente
   creadoEn: timestamp("creado_en").notNull().defaultNow(),
+});
+
+/**
+ * Evidencias fotográficas de un conteo (etapa 2, ampliación del prototipo).
+ * Solo metadatos: los bytes están en evidencias_contenido para que los
+ * listados nunca carguen imágenes. Nunca se borran: se anulan con motivo.
+ * Una foto es solo evidencia: no cambia la cantidad contada por la IA.
+ */
+export const evidencias = pgTable("evidencias", {
+  id: serial("id").primaryKey(),
+  conteoId: integer("conteo_id").references(() => conteos.id).notNull(),
+  descripcion: varchar("descripcion", { length: 200 }),
+  // SHA-256 (hex) de la imagen guardada, para comprobar que no cambió.
+  sha256: char("sha256", { length: 64 }).notNull(),
+  mime: varchar("mime", { length: 30 }).notNull().default("image/jpeg"),
+  bytes: integer("bytes").notNull(),
+  ancho: integer("ancho").notNull(),
+  alto: integer("alto").notNull(),
+  bytesMiniatura: integer("bytes_miniatura").notNull(),
+  // Fecha de la foto según el celular (no verificable); subidoEn la pone el servidor.
+  tomadaEn: timestamp("tomada_en"),
+  subidoPor: integer("subido_por").references(() => usuarios.id).notNull(),
+  subidoEn: timestamp("subido_en").notNull().defaultNow(),
+  anuladaEn: timestamp("anulada_en"),
+  anuladaPor: integer("anulada_por").references(() => usuarios.id),
+  motivoAnulacion: varchar("motivo_anulacion", { length: 300 }),
+  // Restricciones CHECK, índice único parcial y triggers que impiden borrar
+  // o alterar evidencias: escritos a mano en la migración 0004.
+});
+
+export const evidenciasContenido = pgTable("evidencias_contenido", {
+  evidenciaId: integer("evidencia_id").primaryKey().references(() => evidencias.id),
+  imagen: bytea("imagen").notNull(),
+  miniatura: bytea("miniatura").notNull(),
 });

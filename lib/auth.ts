@@ -66,3 +66,9 @@ export async function verificarToken(token: string): Promise<SesionUsuario | nul
 }
 
 export const NOMBRE_COOKIE_SESION = "sesion_token";
+
+/** Usuario de la cookie de sesión de la petición, o null si no hay sesión válida. */
+export async function usuarioDeSesion(req: { cookies: { get(nombre: string): { value: string } | undefined } }): Promise<SesionUsuario | null> {
+  const token = req.cookies.get(NOMBRE_COOKIE_SESION)?.value;
+  return token ? await verificarToken(token) : null;
+}

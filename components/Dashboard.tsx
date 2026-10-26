@@ -6,6 +6,7 @@ import { VentasModule } from "./VentasModule";
 import { ReporteContratistaModule } from "./ReporteContratistaModule";
 import { GraficoProduccion, etiquetaDia, type DiaProduccion } from "./GraficoProduccion";
 import { BadgeValidacion, ValidacionConteo } from "./ValidacionConteo";
+import { EvidenciasConteo } from "./EvidenciasConteo";
 import { ESTADOS_VALIDACION, ETIQUETA_ESTADO_VALIDACION, type EstadoValidacion } from "@/lib/conteos";
 
 export type Conteo = {
@@ -671,7 +672,12 @@ export function Dashboard() {
                                 <dd>{c.discrepancia ? "⚠ Discrepancia con el reporte manual" : "✓ Coincide o sin reporte"}</dd>
                               </div>
                             </dl>
-                            {!modoSimulado && <ValidacionConteo conteo={c} esAdmin={esAdmin} onValidado={cargar} />}
+                            {!modoSimulado && (
+                              <>
+                                <ValidacionConteo conteo={c} esAdmin={esAdmin} onValidado={cargar} />
+                                <EvidenciasConteo conteoId={c.id} esAdmin={esAdmin} />
+                              </>
+                            )}
                           </td>
                         </tr>
                       )}
