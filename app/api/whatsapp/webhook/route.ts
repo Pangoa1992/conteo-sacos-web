@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import twilio from "twilio";
-import { db } from "@/db";
-import { conteos } from "@/db/schema";
-import { desc, sql } from "drizzle-orm";
-import { ETIQUETA_ESTADO_VALIDACION, ZONA_HORARIA_PLANTA, type EstadoValidacion } from "@/lib/conteos";
+import { responderComando } from "@/lib/consultas-whatsapp";
+import {
+  TEXTO_AYUDA,
+  TEXTO_ERROR,
+  TEXTO_NO_AUTORIZADO,
+  TEXTO_SIN_LISTA,
+  enmascararNumero,
+  interpretarComando,
+  leerNumerosAutorizados,
+  limitarRespuesta,
+  normalizarNumero,
+} from "@/lib/whatsapp";
 
 /**
  * POST /api/whatsapp/webhook
@@ -12,11 +20,17 @@ import { ETIQUETA_ESTADO_VALIDACION, ZONA_HORARIA_PLANTA, type EstadoValidacion 
  * WhatsApp al número del sandbox. Se responde en formato TwiML (XML),
  * que es lo que Twilio espera para saber qué contestar.
  *
- * Seguridad: se exige SIEMPRE una firma válida de Twilio
- * (X-Twilio-Signature) calculada con TWILIO_AUTH_TOKEN, para asegurarse
- * de que el mensaje viene de verdad de Twilio y no de cualquiera que
- * descubra esta URL. Si TWILIO_AUTH_TOKEN no está configurado, el
- * webhook queda deshabilitado (no responde datos de conteo).
+ * Seguridad:
+ *  - Se exige SIEMPRE una firma válida de Twilio (X-Twilio-Signature)
+ *    calculada con TWILIO_AUTH_TOKEN, para asegurarse de que el mensaje viene
+ *    de verdad de Twilio. Sin TWILIO_AUTH_TOKEN el webhook queda deshabilitado (503).
+ *  - Solo reciben datos de producción los números de WHATSAPP_NUMEROS_AUTORIZADOS
+ *    (formato +51XXXXXXXXX, separados por comas). Si la lista está vacía o sin
+ *    configurar, nadie los recibe. Los números se registran enmascarados.
+ *  - Solo datos reales (nunca de prueba), sin ventas ni inventario.
+ *
+ * Comandos (sin importar mayúsculas ni tildes): ayuda, último, hoy, semana,
+ * discrepancias, lote 123. Ver lib/whatsapp.ts y lib/consultas-whatsapp.ts.
  *
  * TWILIO_WEBHOOK_URL (opcional): URL pública exacta configurada en la
  * consola de Twilio. Usarla cuando la app corre detrás de un proxy
@@ -49,59 +63,37 @@ export async function POST(req: NextRequest) {
     return new NextResponse("Firma inválida", { status: 403 });
   }
 
-  const mensajeRecibido = (params["Body"] || "").trim().toLowerCase();
-  const respuesta = await construirRespuesta(mensajeRecibido);
-
+  const respuesta = await construirRespuesta(params["From"], params["Body"] || "");
   const twiml = new twilio.twiml.MessagingResponse();
-  twiml.message(respuesta);
+  twiml.message(limitarRespuesta(respuesta));
 
   return new NextResponse(twiml.toString(), {
     headers: { "Content-Type": "text/xml" },
   });
 }
 
-async function construirRespuesta(mensaje: string): Promise<string> {
-  const preguntaPorConteo =
-    mensaje.includes("saco") || mensaje.includes("conteo") || mensaje.includes("cuant");
-
-  if (preguntaPorConteo) {
-    if (!process.env.DATABASE_URL) {
-      return "El sistema aún no está conectado a la base de datos real. (Modo de prueba)";
-    }
-
-    // Solo conteos reales: los de prueba (origen "prueba*", mismo criterio que
-    // esOrigenPrueba) nunca se informan al dueño. Se ordena por la fecha real
-    // del lote (contado_en); los registros antiguos sin ella usan la de recepción.
-    const [ultimo] = await db
-      .select()
-      .from(conteos)
-      .where(sql`lower(${conteos.origen}) not like 'prueba%'`)
-      .orderBy(desc(sql`coalesce(${conteos.contadoEn}, ${conteos.creadoEn})`), desc(conteos.id))
-      .limit(1);
-
-    if (!ultimo) {
-      return "Todavía no hay ningún conteo real registrado.";
-    }
-
-    // Hora de la planta, no la del servidor (en Vercel el servidor está en UTC).
-    const fecha = (ultimo.contadoEn ?? ultimo.creadoEn).toLocaleString("es-PE", {
-      dateStyle: "short",
-      timeStyle: "short",
-      timeZone: ZONA_HORARIA_PLANTA,
-    });
-    const confianza = ultimo.confianzaPromedio == null ? "No disponible" : `${ultimo.confianzaPromedio}%`;
-    const validacion = ETIQUETA_ESTADO_VALIDACION[ultimo.estadoValidacion as EstadoValidacion] ?? ultimo.estadoValidacion;
-
-    return (
-      `📦 Último conteo: *${ultimo.cantidadSacos} sacos*\n` +
-      `🕐 Contado: ${fecha}\n` +
-      `✅ Confianza: ${confianza}\n` +
-      `📋 Validación: ${validacion}`
-    );
+async function construirRespuesta(remitente: string | undefined, mensaje: string): Promise<string> {
+  const autorizados = leerNumerosAutorizados(process.env.WHATSAPP_NUMEROS_AUTORIZADOS);
+  const numero = normalizarNumero(remitente);
+  if (autorizados.size === 0) {
+    console.warn(`[whatsapp] WHATSAPP_NUMEROS_AUTORIZADOS vacío o sin números válidos: consulta rechazada de ${enmascararNumero(remitente)}.`);
+    return TEXTO_SIN_LISTA;
+  }
+  if (!numero || !autorizados.has(numero)) {
+    console.warn(`[whatsapp] Número no autorizado: ${enmascararNumero(remitente)}.`);
+    return TEXTO_NO_AUTORIZADO;
   }
 
-  return (
-    "Hola 👋 Soy el asistente de Conteo de Sacos — MACROMEC.\n\n" +
-    "Escribe *\"¿cuántos sacos van hoy?\"* para saber el último conteo registrado."
-  );
+  const comando = interpretarComando(mensaje);
+  if (comando.tipo === "ayuda" || comando.tipo === "saludo") return TEXTO_AYUDA;
+  if (!process.env.DATABASE_URL) {
+    return "El sistema aún no está conectado a la base de datos real. (Modo de prueba)";
+  }
+  try {
+    return await responderComando(comando);
+  } catch (err) {
+    // Sin el número completo ni el texto recibido en el registro.
+    console.error(`[whatsapp] Error al responder «${comando.tipo}» a ${enmascararNumero(numero)}:`, err instanceof Error ? err.message : "error desconocido");
+    return TEXTO_ERROR;
+  }
 }

@@ -41,7 +41,7 @@ Abrir http://localhost:3000
 ## Configurar base de datos (PostgreSQL)
 
 1. Copiar `.env.example` a `.env.local` y completar todas las variables obligatorias
-   (`DATABASE_URL`, `JWT_SECRET`, `VISION_API_TOKEN`; `TWILIO_AUTH_TOKEN` para WhatsApp).
+   (`DATABASE_URL`, `JWT_SECRET`, `VISION_API_TOKEN`; `TWILIO_AUTH_TOKEN` y `WHATSAPP_NUMEROS_AUTORIZADOS` para WhatsApp).
    Para desarrollo local se puede levantar PostgreSQL en el puerto 5433 con
    `docker compose --env-file .env.local up -d` (ver `docker-compose.yml`).
 2. Aplicar las migraciones (`drizzle-kit` no lee `.env.local`, hay que exportar `DATABASE_URL`):
@@ -53,6 +53,13 @@ Abrir http://localhost:3000
 ```bash
    curl -X POST http://localhost:3000/api/dev/seed-usuarios -H "X-Dev-Seed-Secret: $DEV_SEED_SECRET"
 ```
+
+## Consultas por WhatsApp
+
+El webhook `POST /api/whatsapp/webhook` (Twilio) exige la firma `X-Twilio-Signature` y solo responde a los números de
+`WHATSAPP_NUMEROS_AUTORIZADOS` (formato internacional, separados por comas). Si la lista está vacía, nadie recibe datos.
+Comandos (sin importar mayúsculas ni tildes): `ayuda`, `último`, `hoy`, `semana`, `discrepancias`, `lote 123`.
+Solo informa datos reales (nunca de prueba) y nunca ventas ni inventario. Los números se registran enmascarados.
 
 ## Despliegue
 
