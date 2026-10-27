@@ -4,7 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { VentasModule } from "./VentasModule";
 import { InventarioModule } from "./InventarioModule";
-import { ReporteContratistaModule } from "./ReporteContratistaModule";
+import { ContratistasModule } from "./ContratistasModule";
 import { GraficoProduccion, etiquetaDia, type DiaProduccion } from "./GraficoProduccion";
 import { ProduccionValidada, type FilaValidacionDiaria } from "./ProduccionValidada";
 import { BadgeValidacion, ValidacionConteo } from "./ValidacionConteo";
@@ -276,9 +276,15 @@ export function Dashboard() {
 
   const hayFiltrosActivos = !!(filtroCamara || filtroDesde || filtroHasta || soloDiscrepancias || filtroValidacion);
   const esAdmin = usuario?.rol === "admin_macromec";
-  const conteoParaModulos = ultimo
-    ? { id: ultimo.id, cantidadSacos: ultimo.cantidadSacos, creadoEn: fechaDe(ultimo), esPrueba: esPrueba(ultimo) }
-    : undefined;
+  // Lotes que se pueden elegir al registrar un reporte de contratista (los de la vista actual).
+  const lotesParaReporte = useMemo(() => conteosVista.map((c) => ({
+    id: c.id,
+    cantidadSacos: c.cantidadSacos,
+    fechaConteo: fechaDe(c),
+    esPrueba: esPrueba(c),
+    estadoValidacion: estadoDe(c),
+    reporteVigente: c.reporteContratista ?? null,
+  })), [conteosVista]);
 
   const secciones = [
     { id: "resumen", texto: "Resumen" },
@@ -286,7 +292,8 @@ export function Dashboard() {
     { id: "produccion", texto: "Producción diaria" },
     { id: "camaras", texto: "Cámaras" },
     { id: "historial", texto: "Historial" },
-    ...(esAdmin ? [{ id: "contratistas", texto: "Contratistas" }, { id: "inventario", texto: "Inventario" }, { id: "ventas", texto: "Ventas" }] : []),
+    { id: "contratistas", texto: "Contratistas" },
+    ...(esAdmin ? [{ id: "inventario", texto: "Inventario" }, { id: "ventas", texto: "Ventas" }] : []),
   ];
 
   // Sección activa del menú: la última cuyo inicio ya pasó el primer tercio de la pantalla.
@@ -720,9 +727,13 @@ export function Dashboard() {
           </div>
         </section>
 
+        {/* Contratistas y reportes (etapa 4A): el admin registra; el cliente consulta en solo lectura. */}
+        {!modoSimulado && usuario && (
+          <ContratistasModule esAdmin={esAdmin} vista={vista} lotes={lotesParaReporte} recarga={actualizadoEn} onRegistrado={cargar} />
+        )}
+
         {esAdmin && (
           <>
-            <ReporteContratistaModule conteo={conteoParaModulos} onRegistrado={cargar} />
             {/* Tras vender, anular o validar se recarga todo el panel: el inventario se actualiza al instante. */}
             <InventarioModule vista={vista} recarga={actualizadoEn} />
             <VentasModule incluir={enVista} esVistaPrueba={vista !== "real"} recarga={actualizadoEn} onCambio={cargar} />

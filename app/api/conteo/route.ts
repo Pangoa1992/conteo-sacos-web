@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { conteos, reportesContratista, usuarios } from "@/db/schema";
-import { asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { compararSecreto, extraerBearer } from "@/lib/seguridad";
 import { esOrigenPrueba, hayDiscrepancia } from "@/lib/conteos";
+import { ORDEN_VIGENCIA_REPORTE } from "@/lib/reportes-contratista-servidor";
 
 // Cantidad de conteos que devuelve GET (por defecto y máximo).
 const LIMITE_POR_DEFECTO = 20;
@@ -76,9 +77,11 @@ export async function GET(req: NextRequest) {
         .select()
         .from(reportesContratista)
         .where(inArray(reportesContratista.conteoId, ultimos.map((c) => c.id)))
-        .orderBy(asc(reportesContratista.id))
+        .orderBy(...ORDEN_VIGENCIA_REPORTE)
     : [];
-  const reportePorConteo = new Map(reportes.map((r) => [r.conteoId, r])); // queda el más reciente
+  // El primero de cada lote en el orden de vigencia es su reporte vigente.
+  const reportePorConteo = new Map<number | null, (typeof reportes)[number]>();
+  for (const r of reportes) if (!reportePorConteo.has(r.conteoId)) reportePorConteo.set(r.conteoId, r);
 
   const conteosConAlerta = ultimos.map((c) => {
     const reporte = reportePorConteo.get(c.id);

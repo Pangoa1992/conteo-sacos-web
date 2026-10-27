@@ -782,6 +782,25 @@ button, input { font-family: inherit; }
 .tabla-inventario thead th, .tabla-inventario td { padding-left: 0.5rem; padding-right: 0.5rem; }
 .inv-alcance { font-size: 0.82rem; color: var(--texto-2); margin: 0 0 0.75rem; }
 .inv-alcance-sub { font-weight: 400; font-size: 0.82rem; }
+/* ---------- Contratistas y reportes (etapa 4A) ---------- */
+.reporte-form { margin-bottom: 0.5rem; }
+.buscar-lote { margin: 0.4rem 0 0.8rem; }
+.buscar-lote summary { cursor: pointer; font-size: 0.86rem; color: var(--texto-2); }
+.buscar-lote .filtros { margin-top: 0.6rem; }
+.lotes-encontrados { list-style: none; margin: 0 0 0.6rem; padding: 0; border-top: 1px solid var(--linea); }
+.lotes-encontrados li { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; padding: 0.45rem 0.25rem;
+  border-bottom: 1px solid var(--linea); font-size: 0.84rem; overflow-wrap: anywhere; }
+.subtitulo-con-accion { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
+.subtitulo-con-accion .subtitulo { margin-bottom: 0.5rem; }
+.filtro-lote { width: 6rem; }
+.kpi-valor-par { font-size: 1.45rem; }
+.kpi-alerta { border-top: 3px solid var(--critico); }
+.celda-valor { display: flex; flex-direction: column; gap: 0.15rem; overflow-wrap: anywhere; }
+.celda-sub { font-size: 0.76rem; max-width: 22rem; }
+.fila-reemplazada td { color: var(--texto-tenue); }
+.tabla-reportes td.num, .tabla-reportes td[data-label="Registrado"] { white-space: nowrap; }
+a.btn-secundario { display: inline-block; text-decoration: none; }
+a.btn-secundario.deshabilitado { opacity: 0.5; cursor: default; pointer-events: none; }
 a.btn-acento { display: inline-block; text-decoration: none; }
 a.btn-acento.deshabilitado { opacity: 0.5; cursor: default; pointer-events: none; }
 
@@ -1051,6 +1070,11 @@ a.btn-acento.deshabilitado { opacity: 0.5; cursor: default; pointer-events: none
   .historial .fila-detalle td, .historial .fila-vacia td, .historial .fila-detalle-venta td { display: block; text-align: left; }
   .historial .fila-detalle td::before, .historial .fila-vacia td::before, .historial .fila-detalle-venta td::before { content: none; }
   .campo-lote, .campo-lote select { width: 100%; }
+  /* Contratistas (4A): las celdas de varias partes se apilan a la derecha y el texto puede partirse */
+  .tabla-reportes td, .tabla-contratistas td { white-space: normal !important; }
+  .tabla-reportes td::before, .tabla-contratistas td::before { flex: none; }
+  .tabla-reportes .celda-valor, .tabla-contratistas .celda-valor { align-items: flex-end; text-align: right; min-width: 0; }
+  .tabla-reportes .celda-sub { max-width: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

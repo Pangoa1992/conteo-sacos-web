@@ -4,6 +4,7 @@ import { conteos, reportesContratista, usuarios, validacionesConteo } from "@/db
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { verificarToken, NOMBRE_COOKIE_SESION } from "@/lib/auth";
+import { ORDEN_VIGENCIA_REPORTE } from "@/lib/reportes-contratista-servidor";
 import {
   ESTADOS_VALIDACION,
   LONGITUD_MAXIMA_OBSERVACION,
@@ -129,12 +130,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         });
       }
 
-      // Mismo criterio que el dashboard: el reporte más reciente del contratista.
+      // El reporte vigente del contratista (misma regla en todo el sistema).
       const [reporte] = await tx
         .select({ cantidadReportada: reportesContratista.cantidadReportada })
         .from(reportesContratista)
         .where(eq(reportesContratista.conteoId, id))
-        .orderBy(desc(reportesContratista.id))
+        .orderBy(...ORDEN_VIGENCIA_REPORTE)
         .limit(1);
 
       const errores = erroresValidacion({
