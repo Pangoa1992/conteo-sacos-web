@@ -761,6 +761,30 @@ button, input { font-family: inherit; }
 .historicas summary { cursor: pointer; font-size: 0.92rem; font-weight: 600; color: var(--texto); }
 .historicas .tarjeta-sub { margin: 0.4rem 0 0.6rem; }
 
+/* ---------- Inventario (etapa 3C) ---------- */
+
+.inv-kpis { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.inv-aparte { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.6rem; }
+.inv-dato {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--linea);
+  border-radius: 10px;
+}
+.inv-dato-aviso { border-color: var(--aviso); background: var(--aviso-bg); }
+.inv-dato-valor { font-size: 1.35rem; font-weight: 700; color: var(--texto); font-variant-numeric: tabular-nums; }
+.inv-dato-texto { font-size: 0.8rem; color: var(--texto-2); line-height: 1.3; }
+.tabla-inventario td.num, .tabla-inventario td[data-label="Fecha"] { white-space: nowrap; }
+/* 9 columnas: encabezados en dos líneas y celdas compactas para que «Disponibles» se vea sin desplazar */
+.tabla-inventario thead th { white-space: normal; line-height: 1.25; }
+.tabla-inventario thead th, .tabla-inventario td { padding-left: 0.5rem; padding-right: 0.5rem; }
+.inv-alcance { font-size: 0.82rem; color: var(--texto-2); margin: 0 0 0.75rem; }
+.inv-alcance-sub { font-weight: 400; font-size: 0.82rem; }
+a.btn-acento { display: inline-block; text-decoration: none; }
+a.btn-acento.deshabilitado { opacity: 0.5; cursor: default; pointer-events: none; }
+
 /* ---------- Validación de conteos (fila expandida del historial) ---------- */
 
 .validacion {
@@ -974,6 +998,8 @@ button, input { font-family: inherit; }
 @media (max-width: 1100px) {
   .val-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .composiciones { grid-template-columns: 1fr; }
+  .inv-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .inv-aparte { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (max-width: 600px) {
@@ -982,6 +1008,9 @@ button, input { font-family: inherit; }
   .kpi { padding: 0.85rem; }
   .kpi-valor { font-size: 1.5rem; }
   .val-kpis { grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+  .inv-kpis { grid-template-columns: 1fr 1fr; }
+  .inv-kpis .kpi-validada { grid-column: span 2; }
+  .inv-aparte { grid-template-columns: 1fr 1fr; }
   .segmentado { width: 100%; }
   .segmentado button { flex: 1; }
   .page-head {

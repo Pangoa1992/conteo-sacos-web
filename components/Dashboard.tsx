@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { VentasModule } from "./VentasModule";
+import { InventarioModule } from "./InventarioModule";
 import { ReporteContratistaModule } from "./ReporteContratistaModule";
 import { GraficoProduccion, etiquetaDia, type DiaProduccion } from "./GraficoProduccion";
 import { ProduccionValidada, type FilaValidacionDiaria } from "./ProduccionValidada";
@@ -285,7 +286,7 @@ export function Dashboard() {
     { id: "produccion", texto: "Producción diaria" },
     { id: "camaras", texto: "Cámaras" },
     { id: "historial", texto: "Historial" },
-    ...(esAdmin ? [{ id: "contratistas", texto: "Contratistas" }, { id: "ventas", texto: "Ventas" }] : []),
+    ...(esAdmin ? [{ id: "contratistas", texto: "Contratistas" }, { id: "inventario", texto: "Inventario" }, { id: "ventas", texto: "Ventas" }] : []),
   ];
 
   // Sección activa del menú: la última cuyo inicio ya pasó el primer tercio de la pantalla.
@@ -722,7 +723,9 @@ export function Dashboard() {
         {esAdmin && (
           <>
             <ReporteContratistaModule conteo={conteoParaModulos} onRegistrado={cargar} />
-            <VentasModule incluir={enVista} esVistaPrueba={vista !== "real"} recarga={actualizadoEn} />
+            {/* Tras vender, anular o validar se recarga todo el panel: el inventario se actualiza al instante. */}
+            <InventarioModule vista={vista} recarga={actualizadoEn} />
+            <VentasModule incluir={enVista} esVistaPrueba={vista !== "real"} recarga={actualizadoEn} onCambio={cargar} />
           </>
         )}
 

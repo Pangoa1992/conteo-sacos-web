@@ -44,6 +44,7 @@ type Props = {
   incluir: (esPrueba: boolean) => boolean; // vista real / prueba / todos del dashboard
   esVistaPrueba: boolean;
   recarga?: unknown; // cambia cuando el dashboard actualiza sus datos
+  onCambio?: () => void; // tras registrar o anular una venta (el dashboard recarga el inventario)
 };
 
 type Mensaje = { ok: boolean; texto: string } | null;
@@ -73,7 +74,7 @@ function EtiquetaPrueba() {
  * Las ventas históricas, anteriores al control de validación, se muestran
  * aparte, sin cambios y fuera del cálculo de stock.
  */
-export function VentasModule({ incluir, esVistaPrueba, recarga }: Props) {
+export function VentasModule({ incluir, esVistaPrueba, recarga, onCambio }: Props) {
   const [ventas, setVentas] = useState<Venta[]>([]);
   const [lotes, setLotes] = useState<Lote[]>([]);
   const [historicas, setHistoricas] = useState<VentaHistorica[]>([]);
@@ -190,6 +191,7 @@ export function VentasModule({ incluir, esVistaPrueba, recarga }: Props) {
         setMensaje({ ok: false, texto: data.error || "No se pudo registrar la venta." });
       }
       cargar();
+      onCambio?.();
     } catch {
       // Se conservan la clave y el lote pendiente: si la venta llegó a registrarse, el reintento no la duplica.
       setMensaje({ ok: false, texto: "Error de conexión. Intente nuevamente: la venta no se duplicará." });
@@ -219,6 +221,7 @@ export function VentasModule({ incluir, esVistaPrueba, recarga }: Props) {
         setMensajeAnulacion({ ok: false, texto: data.error || "No se pudo anular la venta." });
       }
       cargar();
+      onCambio?.();
     } catch {
       setMensajeAnulacion({ ok: false, texto: "Error de conexión. Intente nuevamente." });
     } finally {
