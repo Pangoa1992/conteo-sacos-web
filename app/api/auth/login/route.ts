@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { usuarios } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { autenticacionConfigurada, crearToken, NOMBRE_COOKIE_SESION } from "@/lib/auth";
+import { autenticacionConfigurada, crearToken, NOMBRE_COOKIE_SESION, opcionesCookieSesion } from "@/lib/auth";
 import { compararPassword, hashearPassword } from "@/lib/password";
 
 const loginSchema = z.object({
@@ -72,11 +72,8 @@ export async function POST(req: NextRequest) {
   });
 
   respuesta.cookies.set(NOMBRE_COOKIE_SESION, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    ...opcionesCookieSesion(req),
     maxAge: 60 * 60 * 24 * 7, // 7 días
-    path: "/",
   });
 
   return respuesta;

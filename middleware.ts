@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verificarToken, NOMBRE_COOKIE_SESION } from "@/lib/auth";
+import { verificarToken, NOMBRE_COOKIE_SESION, urlMismoOrigen } from "@/lib/auth";
 
 // Rutas que no requieren sesión iniciada.
 const RUTAS_PUBLICAS = ["/login", "/api/auth/login", "/api/auth/logout", "/api/auth/me", "/api/dev/seed-usuarios"];
@@ -31,7 +31,7 @@ export async function middleware(req: NextRequest) {
     if (pathname.startsWith("/api")) {
       return NextResponse.json({ error: "No autenticado" }, { status: 401 });
     }
-    const loginUrl = new URL("/login", req.url);
+    const loginUrl = urlMismoOrigen(req, "/login");
     return NextResponse.redirect(loginUrl);
   }
 

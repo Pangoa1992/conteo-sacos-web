@@ -22,7 +22,8 @@ class Rechazo extends Error {
  * la fecha, el usuario y el motivo, y deja de mostrarse al cliente.
  *   200 anulada · 400 sin motivo · 401/403 · 404 no existe · 409 ya estaba anulada
  */
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, contexto: { params: Promise<{ id: string }> }) {
+  const params = await contexto.params;
   const usuario = await usuarioDeSesion(req);
   if (!usuario) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });

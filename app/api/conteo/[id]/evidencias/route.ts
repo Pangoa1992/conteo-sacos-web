@@ -34,7 +34,8 @@ function leerId(param: string): number | null {
  * Personal de MACROMEC: todas, con los datos de anulación.
  * Cliente: solo las activas; las anuladas no se le muestran.
  */
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, contexto: { params: Promise<{ id: string }> }) {
+  const params = await contexto.params;
   const usuario = await usuarioDeSesion(req);
   if (!usuario) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
@@ -99,7 +100,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
  *   201 creada · 400 datos o imagen inválidos · 401/403 sesión o rol · 404 conteo
  *   409 límite de 10 activas o foto repetida · 413 demasiado grande
  */
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, contexto: { params: Promise<{ id: string }> }) {
+  const params = await contexto.params;
   const usuario = await usuarioDeSesion(req);
   if (!usuario) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });

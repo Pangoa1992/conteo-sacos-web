@@ -11,7 +11,8 @@ import { usuarioDeSesion } from "@/lib/auth";
  * responde 404, igual que si no existiera.
  * La URL no termina en .jpg a propósito: el middleware no revisa esas rutas.
  */
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, contexto: { params: Promise<{ id: string }> }) {
+  const params = await contexto.params;
   const usuario = await usuarioDeSesion(req);
   if (!usuario) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });

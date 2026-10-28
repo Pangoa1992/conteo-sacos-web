@@ -42,7 +42,8 @@ function leerId(param: string): number | null {
  * Historial de revisiones del conteo, de la más reciente a la más antigua.
  * Lo pueden ver todos los usuarios con sesión (middleware).
  */
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, contexto: { params: Promise<{ id: string }> }) {
+  const params = await contexto.params;
   const id = leerId(params.id);
   if (!id) {
     return NextResponse.json({ error: "Identificador de conteo inválido" }, { status: 400 });
@@ -86,7 +87,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
  *   200 validación registrada · 400 datos incoherentes · 401/403 sesión o rol
  *   404 conteo inexistente · 409 el estado cambió desde que se abrió la revisión
  */
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, contexto: { params: Promise<{ id: string }> }) {
+  const params = await contexto.params;
   const token = req.cookies.get(NOMBRE_COOKIE_SESION)?.value;
   const usuario = token ? await verificarToken(token) : null;
 
