@@ -41,7 +41,8 @@ Abrir http://localhost:3000
 ## Configurar base de datos (PostgreSQL)
 
 1. Copiar `.env.example` a `.env.local` y completar todas las variables obligatorias
-   (`DATABASE_URL`, `JWT_SECRET`, `VISION_API_TOKEN`; `TWILIO_AUTH_TOKEN` y `WHATSAPP_NUMEROS_AUTORIZADOS` para WhatsApp).
+   (`DATABASE_URL`, `JWT_SECRET`, `VISION_API_TOKEN`; `TWILIO_AUTH_TOKEN` y `WHATSAPP_NUMEROS_AUTORIZADOS` para WhatsApp;
+   `ROBOFLOW_API_KEY` para Contar por foto).
    Para desarrollo local se puede levantar PostgreSQL en el puerto 5433 con
    `docker compose --env-file .env.local up -d` (ver `docker-compose.yml`).
 2. Aplicar las migraciones (`drizzle-kit` no lee `.env.local`, hay que exportar `DATABASE_URL`):
@@ -53,6 +54,15 @@ Abrir http://localhost:3000
 ```bash
    curl -X POST http://localhost:3000/api/dev/seed-usuarios -H "X-Dev-Seed-Secret: $DEV_SEED_SECRET"
 ```
+
+## Contar sacos por foto
+
+Módulo «Contar por foto» (solo administrador): se toma una foto con la cámara del celular o se elige una imagen del
+equipo; el navegador la reduce a 1600 px como máximo y `POST /api/contar-foto` la cuenta con el mismo modelo RF-DETR
+del detector Python (Roboflow, confianza mínima 0,50, clase «Saco»). Se muestra la foto con las cajas detectadas, el
+total y la confianza. El resultado **no se guarda** ni crea lotes: el conteo oficial sigue siendo el del sistema de
+visión. Requiere `ROBOFLOW_API_KEY`, que se usa solo en el servidor; sin ella el módulo indica que no está configurado.
+Cada foto es una consulta a Roboflow (necesita internet). El modelo detecta sacos, no evalúa su calidad.
 
 ## Consultas por WhatsApp
 

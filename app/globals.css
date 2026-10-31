@@ -1079,6 +1079,37 @@ a.btn-acento.deshabilitado { opacity: 0.5; cursor: default; pointer-events: none
   .tabla-reportes .celda-sub { max-width: none; }
 }
 
+/* ---- Contar por foto (fase 1): foto con las cajas de RF-DETR y el total ---- */
+.conteo-foto-resultado { display: flex; flex-wrap: wrap; gap: 1.2rem; align-items: flex-start; }
+.conteo-foto-figura {
+  position: relative;
+  flex: 1 1 420px;
+  max-width: 900px;
+  line-height: 0;
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+  overflow: hidden;
+  background: var(--rejilla);
+}
+.conteo-foto-figura img { display: block; width: 100%; height: auto; }
+.conteo-foto-figura svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.conteo-foto-caja { fill: none; stroke: var(--naranja); stroke-width: 3px; vector-effect: non-scaling-stroke; }
+.conteo-foto-etiqueta {
+  fill: #ffffff;
+  stroke: #000000;
+  stroke-width: 3px;
+  paint-order: stroke;
+  font-family: var(--fuente);
+  font-weight: 600;
+}
+.conteo-foto-datos { flex: 1 1 240px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.8rem; }
+/* .kpi-hero ocupa 2 filas (o 2 columnas en celular) en los indicadores: aquí va en una sola columna. */
+.conteo-foto-datos .kpi-hero { grid-row: auto; grid-column: auto; }
+.conteo-foto-datos .validacion-nota { margin: 0; }
+@media (max-width: 600px) {
+  .conteo-foto-figura { flex-basis: 100%; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
 }

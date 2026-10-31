@@ -6,6 +6,7 @@ import { VentasModule } from "./VentasModule";
 import { InventarioModule } from "./InventarioModule";
 import { ContratistasModule } from "./ContratistasModule";
 import { EstadoWhatsapp } from "./EstadoWhatsapp";
+import { ConteoPorFoto } from "./ConteoPorFoto";
 import { GraficoProduccion, etiquetaDia, type DiaProduccion } from "./GraficoProduccion";
 import { ProduccionValidada, type FilaValidacionDiaria } from "./ProduccionValidada";
 import { BadgeValidacion, ValidacionConteo } from "./ValidacionConteo";
@@ -295,7 +296,7 @@ export function Dashboard() {
     { id: "camaras", texto: "Cámaras" },
     { id: "historial", texto: "Historial" },
     { id: "contratistas", texto: "Contratistas" },
-    ...(esAdmin ? [{ id: "inventario", texto: "Inventario" }, { id: "ventas", texto: "Ventas" }, { id: "whatsapp", texto: "WhatsApp" }] : []),
+    ...(esAdmin ? [{ id: "inventario", texto: "Inventario" }, { id: "ventas", texto: "Ventas" }, { id: "whatsapp", texto: "WhatsApp" }, { id: "foto", texto: "Contar por foto" }] : []),
   ];
 
   // Navegación por módulos: el menú cambia el hash (#historial…) y el área principal muestra solo ese
@@ -772,6 +773,10 @@ export function Dashboard() {
             {/* Estado de WhatsApp (etapa 5): solo indicadores, sin token, números ni URL. */}
             <div hidden={oculto("whatsapp")}>
             <EstadoWhatsapp recarga={actualizadoEn} />
+            </div>
+            {/* Contar por foto (fase 1): solo muestra el resultado; no guarda ni crea lotes. */}
+            <div hidden={oculto("foto")}>
+            <ConteoPorFoto visible={!oculto("foto")} />
             </div>
           </>
         )}
