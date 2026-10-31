@@ -111,7 +111,8 @@ export function Dashboard() {
   const [vista, setVista] = useState<Vista>("real");
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [filaExpandida, setFilaExpandida] = useState<number | null>(null);
-  const [seccionActiva, setSeccionActiva] = useState("resumen");
+  // Módulo pedido en el hash de la URL (#historial…); el que se muestra se deriva de los permisos (ver abajo).
+  const [seccionPedida, setSeccionPedida] = useState("resumen");
 
   // Filtros del historial
   const [filtroCamara, setFiltroCamara] = useState("");
@@ -297,35 +298,37 @@ export function Dashboard() {
     ...(esAdmin ? [{ id: "inventario", texto: "Inventario" }, { id: "ventas", texto: "Ventas" }, { id: "whatsapp", texto: "WhatsApp" }] : []),
   ];
 
-  // Sección activa del menú: la última cuyo inicio ya pasó el primer tercio de la pantalla.
-  // Se recalcula al cambiar las secciones (las de admin aparecen al cargar el usuario).
-  const idsSecciones = secciones.map((s) => s.id).join(",");
+  // Navegación por módulos: el menú cambia el hash (#historial…) y el área principal muestra solo ese
+  // módulo. El hash permite enlaces directos y atrás/adelante del navegador.
   useEffect(() => {
-    const ids = idsSecciones.split(",");
-    let cuadro = 0;
-    function actualizar() {
-      cuadro = 0;
-      const umbral = window.innerHeight / 3;
-      let actual = ids[0];
-      for (const id of ids) {
-        const el = document.getElementById(id);
-        if (el && el.getBoundingClientRect().top <= umbral) actual = id;
-      }
-      // Al final de la página la última sección puede no alcanzar el umbral.
-      const alFinal = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
-      if (alFinal && window.scrollY > 0) actual = ids[ids.length - 1];
-      setSeccionActiva(actual);
-    }
-    const programar = () => { if (!cuadro) cuadro = requestAnimationFrame(actualizar); };
-    actualizar();
-    window.addEventListener("scroll", programar, { passive: true });
-    window.addEventListener("resize", programar);
+    const leer = () => setSeccionPedida(decodeURIComponent(window.location.hash.slice(1)) || "resumen");
+    leer();
+    // Atrás/adelante: la página vuelve arriba al cambiar de módulo; sin esto el navegador restauraría la
+    // posición guardada de esa entrada y podría dejar el encabezado bajo la barra fija.
+    window.history.scrollRestoration = "manual";
+    // popstate: atrás/adelante entre las entradas que crea el menú con pushState.
+    window.addEventListener("hashchange", leer);
+    window.addEventListener("popstate", leer);
     return () => {
-      window.removeEventListener("scroll", programar);
-      window.removeEventListener("resize", programar);
-      cancelAnimationFrame(cuadro);
+      window.removeEventListener("hashchange", leer);
+      window.removeEventListener("popstate", leer);
     };
-  }, [idsSecciones]);
+  }, []);
+  // Un módulo que no está en el menú de este usuario (p. ej. #inventario de un cliente) muestra el Resumen.
+  // Las secciones de admin aparecen al cargar el usuario: hasta entonces no se corrige el hash, para no
+  // perder un enlace directo válido del administrador.
+  const seccionActiva = secciones.some((s) => s.id === seccionPedida) ? seccionPedida : "resumen";
+  useEffect(() => {
+    if (usuario && seccionPedida !== seccionActiva) {
+      window.history.replaceState(null, "", "#resumen");
+      setSeccionPedida("resumen");
+    }
+  }, [usuario, seccionPedida, seccionActiva]);
+  // Cada módulo se ve desde su inicio.
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }, [seccionActiva]);
+  const oculto = (id: string) => seccionActiva !== id;
 
   const etiquetaVista = { real: "Datos reales", prueba: "Datos de prueba", todos: "Todos los datos" }[vista];
 
@@ -357,7 +360,17 @@ export function Dashboard() {
                 key={s.id}
                 href={`#${s.id}`}
                 aria-current={seccionActiva === s.id ? "location" : undefined}
-                onClick={() => setMenuAbierto(false)}
+                onClick={(e) => {
+                  setMenuAbierto(false);
+                  // Ctrl/Cmd/Mayús o botón central: comportamiento del navegador (abrir en otra pestaña).
+                  if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+                  // Sin el salto del navegador al ancla, que dejaba la sección bajo la barra fija del celular,
+                  // también al pulsar el módulo ya abierto: siempre se vuelve arriba.
+                  e.preventDefault();
+                  if (window.location.hash !== `#${s.id}`) window.history.pushState(null, "", `#${s.id}`);
+                  setSeccionPedida(s.id);
+                  window.scrollTo({ top: 0, behavior: "instant" });
+                }}
               >
                 {s.texto}
               </a>
@@ -385,7 +398,8 @@ export function Dashboard() {
 
       {/* ================= Contenido ================= */}
       <main className="main">
-        <header className="page-head" id="resumen">
+        {/* Encabezado común (selector Reales / Prueba / Todos) y avisos: visibles en todos los módulos. */}
+        <header className="page-head">
           <div>
             <h1>Panel de producción</h1>
             <p className="page-sub">
@@ -448,8 +462,10 @@ export function Dashboard() {
           </div>
         )}
 
-        {/* ---- Indicadores ---- */}
-        <section className="kpis" aria-label={`Indicadores · ${etiquetaVista}`}>
+        {/* ---- Módulos: solo se ve el seleccionado. Siguen montados (hidden) para conservar sus datos y filtros. ---- */}
+        {/* ---- Indicadores (Resumen) ---- */}
+        <div hidden={oculto("resumen")}>
+        <section className="kpis" id="resumen" aria-label={`Indicadores · ${etiquetaVista}`}>
           <div className="kpi kpi-hero">
             <span className="kpi-label">Producción de hoy</span>
             <span className="kpi-valor">{cargando ? "—" : fmt(produccionHoy?.totalSacos ?? 0)}<span className="kpi-unidad">sacos</span></span>
@@ -502,8 +518,10 @@ export function Dashboard() {
             <span className="kpi-sub">de {conteosVista.length} registros recientes</span>
           </div>
         </section>
+        </div>
 
         {/* ---- Producción validada (etapa 3A) ---- */}
+        <div hidden={oculto("validada")}>
         <ProduccionValidada
           validacion={modoSimulado ? [] : resumen?.validacion ?? []}
           diarioPorEstado={modoSimulado ? [] : resumen?.diarioPorEstado ?? []}
@@ -513,8 +531,10 @@ export function Dashboard() {
           etiquetaVista={etiquetaVista}
           cargando={cargando}
         />
+        </div>
 
         {/* ---- Producción diaria ---- */}
+        <div hidden={oculto("produccion")}>
         <section className="tarjeta" id="produccion">
           {/* Foto de la planta (#81): decorativa, se carga al acercarse a la sección */}
           <img
@@ -536,8 +556,10 @@ export function Dashboard() {
           </div>
           {dias.length > 0 ? <GraficoProduccion dias={dias} hoy={hoy} /> : <p className="vacio">Sin datos de producción.</p>}
         </section>
+        </div>
 
         {/* ---- Cámaras ---- */}
+        <div hidden={oculto("camaras")}>
         <section className="tarjeta" id="camaras">
           <div className="tarjeta-head">
             <div>
@@ -567,8 +589,10 @@ export function Dashboard() {
             </ul>
           )}
         </section>
+        </div>
 
         {/* ---- Historial ---- */}
+        <div hidden={oculto("historial")}>
         <section className="tarjeta" id="historial">
           <div className="tarjeta-head">
             <div>
@@ -727,19 +751,28 @@ export function Dashboard() {
             </table>
           </div>
         </section>
+        </div>
 
         {/* Contratistas y reportes (etapa 4A): el admin registra; el cliente consulta en solo lectura. */}
+        <div hidden={oculto("contratistas")}>
         {!modoSimulado && usuario && (
           <ContratistasModule esAdmin={esAdmin} vista={vista} lotes={lotesParaReporte} recarga={actualizadoEn} onRegistrado={cargar} />
         )}
+        </div>
 
         {esAdmin && (
           <>
             {/* Tras vender, anular o validar se recarga todo el panel: el inventario se actualiza al instante. */}
+            <div hidden={oculto("inventario")}>
             <InventarioModule vista={vista} recarga={actualizadoEn} />
+            </div>
+            <div hidden={oculto("ventas")}>
             <VentasModule incluir={enVista} esVistaPrueba={vista !== "real"} recarga={actualizadoEn} onCambio={cargar} />
+            </div>
             {/* Estado de WhatsApp (etapa 5): solo indicadores, sin token, números ni URL. */}
+            <div hidden={oculto("whatsapp")}>
             <EstadoWhatsapp recarga={actualizadoEn} />
+            </div>
           </>
         )}
 
