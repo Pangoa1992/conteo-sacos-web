@@ -569,6 +569,8 @@ button, input { font-family: inherit; }
 .fuente-meta { font-size: 0.8rem; color: var(--texto-tenue); }
 .estado-punto { width: 10px; height: 10px; border-radius: 50%; margin-top: 0.35rem; flex-shrink: 0; }
 .estado-desconocido { background: transparent; border: 2px solid var(--texto-tenue); }
+.estado-ok { background: var(--ok); }
+.fuente-nombre-texto { font-weight: 600; font-size: 0.88rem; }
 
 /* ---------- Filtros ---------- */
 

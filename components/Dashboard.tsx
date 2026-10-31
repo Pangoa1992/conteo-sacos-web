@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { VentasModule } from "./VentasModule";
 import { InventarioModule } from "./InventarioModule";
 import { ContratistasModule } from "./ContratistasModule";
+import { EstadoWhatsapp } from "./EstadoWhatsapp";
 import { GraficoProduccion, etiquetaDia, type DiaProduccion } from "./GraficoProduccion";
 import { ProduccionValidada, type FilaValidacionDiaria } from "./ProduccionValidada";
 import { BadgeValidacion, ValidacionConteo } from "./ValidacionConteo";
@@ -293,7 +294,7 @@ export function Dashboard() {
     { id: "camaras", texto: "Cámaras" },
     { id: "historial", texto: "Historial" },
     { id: "contratistas", texto: "Contratistas" },
-    ...(esAdmin ? [{ id: "inventario", texto: "Inventario" }, { id: "ventas", texto: "Ventas" }] : []),
+    ...(esAdmin ? [{ id: "inventario", texto: "Inventario" }, { id: "ventas", texto: "Ventas" }, { id: "whatsapp", texto: "WhatsApp" }] : []),
   ];
 
   // Sección activa del menú: la última cuyo inicio ya pasó el primer tercio de la pantalla.
@@ -737,6 +738,8 @@ export function Dashboard() {
             {/* Tras vender, anular o validar se recarga todo el panel: el inventario se actualiza al instante. */}
             <InventarioModule vista={vista} recarga={actualizadoEn} />
             <VentasModule incluir={enVista} esVistaPrueba={vista !== "real"} recarga={actualizadoEn} onCambio={cargar} />
+            {/* Estado de WhatsApp (etapa 5): solo indicadores, sin token, números ni URL. */}
+            <EstadoWhatsapp recarga={actualizadoEn} />
           </>
         )}
 

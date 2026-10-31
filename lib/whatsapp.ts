@@ -71,15 +71,22 @@ export function normalizarNumero(valor: string | null | undefined): string | nul
   return /^\+\d{8,15}$/.test(limpio) ? limpio : null;
 }
 
+// Separados por comas, punto y coma o saltos de línea; los espacios dentro de un número se ignoran.
+const SEPARADOR_NUMEROS = /[,;\n]+/;
+
 /** Números autorizados de la variable de entorno (se ignoran los mal escritos). */
 export function leerNumerosAutorizados(valor: string | null | undefined): Set<string> {
   const numeros = new Set<string>();
-  // Separados por comas, punto y coma o saltos de línea; los espacios dentro de un número se ignoran.
-  for (const parte of (valor ?? "").split(/[,;\n]+/)) {
+  for (const parte of (valor ?? "").split(SEPARADOR_NUMEROS)) {
     const n = normalizarNumero(parte);
     if (n) numeros.add(n);
   }
   return numeros;
+}
+
+/** Cuántas entradas de la variable no son un número válido (para el estado del panel; nunca cuáles). */
+export function contarEntradasNoValidas(valor: string | null | undefined): number {
+  return (valor ?? "").split(SEPARADOR_NUMEROS).filter((parte) => parte.trim() !== "" && !normalizarNumero(parte)).length;
 }
 
 /** Número para registros: código de país y dos últimas cifras («+51•••••••34»). */
@@ -115,3 +122,23 @@ export const TEXTO_SIN_LISTA =
 export const TEXTO_ERROR = "No se pudo consultar la información en este momento. Intente nuevamente en unos minutos.";
 
 export const TEXTO_LOTE_INVALIDO = "Indique el número del lote, por ejemplo: *lote 123*.";
+
+// --- Modo DEMO (ver lib/modo-demo-whatsapp.ts) ---
+export const ETIQUETA_DEMO = "🧪 DEMO · datos de prueba";
+export const ACLARACION_DEMO = "ℹ️ Demostración: estos no son datos de producción.";
+
+export const TEXTO_AYUDA_DEMO = TEXTO_AYUDA.replace(
+  "Solo se informan datos reales.",
+  "En esta demostración solo se informan lotes de prueba."
+);
+
+/**
+ * Respuesta del modo DEMO: la etiqueta al inicio y la aclaración al final.
+ * El texto se recorta antes de añadirlas, así que el límite de Twilio
+ * nunca quita ninguna de las dos.
+ */
+export function marcarDemo(texto: string, maximo = LONGITUD_MAXIMA_RESPUESTA): string {
+  const inicio = `${ETIQUETA_DEMO}\n\n`;
+  const fin = `\n\n${ACLARACION_DEMO}`;
+  return inicio + limitarRespuesta(texto, maximo - inicio.length - fin.length) + fin;
+}

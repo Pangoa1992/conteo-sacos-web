@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import twilio from "twilio";
 import { responderComando } from "@/lib/consultas-whatsapp";
+import { modoDemoWhatsappActivo } from "@/lib/modo-demo-whatsapp-servidor";
 import {
   TEXTO_AYUDA,
   TEXTO_ERROR,
@@ -10,6 +11,7 @@ import {
   interpretarComando,
   leerNumerosAutorizados,
   limitarRespuesta,
+  marcarDemo,
   normalizarNumero,
 } from "@/lib/whatsapp";
 
@@ -27,7 +29,10 @@ import {
  *  - Solo reciben datos de producción los números de WHATSAPP_NUMEROS_AUTORIZADOS
  *    (formato +51XXXXXXXXX, separados por comas). Si la lista está vacía o sin
  *    configurar, nadie los recibe. Los números se registran enmascarados.
- *  - Solo datos reales (nunca de prueba), sin ventas ni inventario.
+ *  - Solo datos reales (nunca de prueba), sin ventas ni inventario. Excepción:
+ *    el modo DEMO (lib/modo-demo-whatsapp.ts), que solo se activa con la BD
+ *    local de demostración y marca cada respuesta «DEMO · datos de prueba».
+ *    No cambia la firma ni la lista de números autorizados.
  *
  * Comandos (sin importar mayúsculas ni tildes): ayuda, último, hoy, semana,
  * discrepancias, lote 123. Ver lib/whatsapp.ts y lib/consultas-whatsapp.ts.
@@ -85,6 +90,15 @@ async function construirRespuesta(remitente: string | undefined, mensaje: string
   }
 
   const comando = interpretarComando(mensaje);
+  // Modo DEMO (solo con la BD local de demostración): lotes de prueba, siempre marcados.
+  if (await modoDemoWhatsappActivo()) {
+    try {
+      return marcarDemo(await responderComando(comando, "demo"));
+    } catch (err) {
+      console.error(`[whatsapp] Error al responder «${comando.tipo}» (DEMO) a ${enmascararNumero(numero)}:`, err instanceof Error ? err.message : "error desconocido");
+      return marcarDemo(TEXTO_ERROR);
+    }
+  }
   if (comando.tipo === "ayuda" || comando.tipo === "saludo") return TEXTO_AYUDA;
   if (!process.env.DATABASE_URL) {
     return "El sistema aún no está conectado a la base de datos real. (Modo de prueba)";

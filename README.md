@@ -61,6 +61,15 @@ El webhook `POST /api/whatsapp/webhook` (Twilio) exige la firma `X-Twilio-Signat
 Comandos (sin importar mayúsculas ni tildes): `ayuda`, `último`, `hoy`, `semana`, `discrepancias`, `lote 123`.
 Solo informa datos reales (nunca de prueba) y nunca ventas ni inventario. Los números se registran enmascarados.
 
+Modo DEMO (solo para la demostración local): responde con los lotes de prueba de `conteo_sacos_demo`, cada respuesta
+marcada «🧪 DEMO · datos de prueba». Se activa únicamente con una variable que pone el script de la demostración
+(nunca en `.env.local`, `.env.example` ni Vercel), con la BD local `conteo_sacos_demo` marcada como demostración y sin
+ningún lote real; si falta cualquier condición, responde como siempre. Ver `lib/modo-demo-whatsapp.ts`.
+
+El panel del administrador muestra el estado de la integración (`GET /api/whatsapp/estado`, solo administrador): webhook
+habilitado, tipo de URL pública, cantidad de números autorizados, si hay conteos reales y si está en modo DEMO. Nunca
+muestra el token, los números, la URL pública ni datos de la conexión.
+
 ## Despliegue
 
 Publicado en **Vercel**, conectado directamente al repositorio de GitHub — cada `git push` a `main` genera un nuevo despliegue automático.
