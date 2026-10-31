@@ -1,15 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { conteos, reportesContratista, usuarios } from "@/db/schema";
-import { desc, eq, inArray, sql } from "drizzle-orm";
+import { desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { compararSecreto, extraerBearer } from "@/lib/seguridad";
-import { esOrigenPrueba, hayDiscrepancia } from "@/lib/conteos";
-import { ORDEN_VIGENCIA_REPORTE } from "@/lib/reportes-contratista-servidor";
+import { usuarioDeSesion } from "@/lib/auth";
+import {
+  ETIQUETA_ESTADO_VALIDACION,
+  UMBRAL_DISCREPANCIA,
+  ZONA_HORARIA_PLANTA,
+  esOrigenPrueba,
+  fechaHoyPlanta,
+  hayDiscrepancia,
+  type EstadoValidacion,
+} from "@/lib/conteos";
+import { construirCsv } from "@/lib/inventario";
+import { leerFiltrosHistorial } from "@/lib/historial";
+import { ORDEN_VIGENCIA_REPORTE, ordenVigenciaReporteSql } from "@/lib/reportes-contratista-servidor";
 
 // Cantidad de conteos que devuelve GET (por defecto y máximo).
 const LIMITE_POR_DEFECTO = 20;
 const LIMITE_MAXIMO = 200;
+
+// El CSV del historial nunca se exporta parcial: si supera LIMITE_CSV responde 413 y pide acotar el filtro.
+const LIMITE_CSV = 20000;
+const SIN_CACHE = { "Cache-Control": "private, no-store" };
+const ZONA = sql.raw(`'${ZONA_HORARIA_PLANTA}'`);
+// Fecha original del conteo (contado_en; los antiguos usan creado_en) en hora de la planta.
+const HORA_PLANTA = sql`((coalesce(c.contado_en, c.creado_en) at time zone 'UTC') at time zone ${ZONA})`;
+const ES_PRUEBA = sql`(lower(c.origen) like 'prueba%')`;
 
 // Longitud mínima aceptada para VISION_API_TOKEN.
 const LONGITUD_MINIMA_TOKEN = 32;
@@ -47,8 +66,12 @@ const conteoInputSchema = z.object({
  *
  * NOTA: si la base de datos no está configurada, se devuelven datos
  * simulados (mock) marcados con modoSimulado: true.
+ *
+ * ?formato=csv: TODO el historial con los filtros del panel (ver exportarCsv).
  */
 export async function GET(req: NextRequest) {
+  if (req.nextUrl.searchParams.get("formato") === "csv") return exportarCsv(req);
+
   if (!process.env.DATABASE_URL) {
     return NextResponse.json({
       modoSimulado: true,
@@ -197,6 +220,106 @@ export async function POST(req: NextRequest) {
     console.error("[conteo] Error de base de datos al registrar el conteo:", err instanceof Error ? err.message : err);
     return NextResponse.json({ error: "Base de datos no disponible temporalmente" }, { status: 503 });
   }
+}
+
+type FilaCsv = {
+  id: number;
+  fecha: string;
+  hora: string;
+  cantidadSacos: number;
+  esPrueba: boolean;
+  fuenteCamara: string | null;
+  confianza: number | null;
+  cantidadReportada: number | null;
+  discrepancia: boolean;
+  estadoValidacion: EstadoValidacion;
+  conformes: number | null;
+  observados: number | null;
+  defectuosos: number | null;
+  validadoPor: string | null;
+  validadoEn: string | null;
+  observacion: string | null;
+};
+
+/**
+ * GET /api/conteo?formato=csv (cualquier sesión, como el historial en pantalla)
+ * Historial COMPLETO con los mismos filtros del panel: tipo (real | prueba | todos),
+ * camara (texto contenido), desde/hasta (fecha original del conteo, hora de Lima),
+ * discrepancias=1 y validacion. El reporte vigente de cada lote es el más reciente.
+ * Fechas en hora de Lima; celdas protegidas contra fórmulas (construirCsv).
+ *
+ *   200 CSV · 400 filtros inválidos · 401 sin sesión · 413 más de LIMITE_CSV lotes · 503 sin BD
+ */
+async function exportarCsv(req: NextRequest) {
+  const usuario = await usuarioDeSesion(req);
+  if (!usuario) return NextResponse.json({ error: "No autenticado" }, { status: 401, headers: SIN_CACHE });
+
+  const leidos = leerFiltrosHistorial(req.nextUrl.searchParams);
+  if ("errores" in leidos) {
+    return NextResponse.json({ error: "Filtros inválidos", detalles: leidos.errores }, { status: 400, headers: SIN_CACHE });
+  }
+  const f = leidos.filtros;
+  if (!process.env.DATABASE_URL) {
+    return NextResponse.json({ error: "Base de datos no configurada: no hay historial que exportar." }, { status: 503, headers: SIN_CACHE });
+  }
+
+  const DISCREPANCIA = sql`coalesce(abs(v.cantidad_reportada - c.cantidad_sacos) > ${UMBRAL_DISCREPANCIA}, false)`;
+  const cs: SQL[] = [sql`true`];
+  if (f.tipo === "real") cs.push(sql`not ${ES_PRUEBA}`);
+  if (f.tipo === "prueba") cs.push(ES_PRUEBA);
+  // strpos (no LIKE): el texto buscado no tiene comodines.
+  if (f.camara) cs.push(sql`strpos(lower(coalesce(c.fuente_camara, '')), lower(${f.camara})) > 0`);
+  if (f.desde) cs.push(sql`${HORA_PLANTA}::date >= ${f.desde}::date`);
+  if (f.hasta) cs.push(sql`${HORA_PLANTA}::date <= ${f.hasta}::date`);
+  if (f.soloDiscrepancias) cs.push(DISCREPANCIA);
+  if (f.validacion) cs.push(sql`c.estado_validacion = ${f.validacion}`);
+
+  // limite + 1 filas: si llega la fila extra, el filtro supera el límite.
+  const filas = [...(await db.execute<FilaCsv>(sql`
+    with vigentes as (
+      select distinct on (r.conteo_id) r.conteo_id, r.cantidad_reportada
+      from reportes_contratista r
+      where r.conteo_id is not null
+      order by r.conteo_id, ${ordenVigenciaReporteSql("r")}
+    )
+    select c.id, to_char(${HORA_PLANTA}, 'DD/MM/YYYY') as fecha, to_char(${HORA_PLANTA}, 'HH24:MI:SS') as hora,
+      c.cantidad_sacos as "cantidadSacos", ${ES_PRUEBA} as "esPrueba", c.fuente_camara as "fuenteCamara",
+      c.confianza_promedio::float8 as confianza, v.cantidad_reportada as "cantidadReportada", ${DISCREPANCIA} as discrepancia,
+      c.estado_validacion as "estadoValidacion", c.sacos_conformes as conformes, c.sacos_observados as observados,
+      c.sacos_defectuosos as defectuosos, u.nombre as "validadoPor",
+      to_char((c.validado_en at time zone 'UTC') at time zone ${ZONA}, 'DD/MM/YYYY HH24:MI:SS') as "validadoEn",
+      c.observacion_validacion as observacion
+    from conteos c
+      left join vigentes v on v.conteo_id = c.id
+      left join usuarios u on u.id = c.validado_por
+    where ${sql.join(cs, sql` and `)}
+    order by coalesce(c.contado_en, c.creado_en) desc, c.id desc
+    limit ${LIMITE_CSV + 1}`))];
+
+  if (filas.length > LIMITE_CSV) {
+    return NextResponse.json(
+      { error: `El filtro incluye más de ${LIMITE_CSV.toLocaleString("es-PE")} lotes: acote las fechas para exportar el CSV completo.`, limite: LIMITE_CSV },
+      { status: 413, headers: SIN_CACHE }
+    );
+  }
+
+  const cuerpo = construirCsv([
+    ["ID", "Fecha (hora Lima)", "Hora (hora Lima)", "Sacos", "Tipo", "Camara/Origen", "Confianza (%)", "Contratista reporto",
+      "Discrepancia", "Validacion", "Conformes (manual)", "Observados (manual)", "Defectuosos (manual)", "Validado por",
+      "Fecha validacion (hora Lima)", "Observacion"],
+    ...filas.map((c) => [c.id, c.fecha, c.hora, c.cantidadSacos, c.esPrueba ? "PRUEBA" : "Real", c.fuenteCamara, c.confianza,
+      c.cantidadReportada, c.discrepancia ? "Si" : "No", ETIQUETA_ESTADO_VALIDACION[c.estadoValidacion] ?? c.estadoValidacion,
+      c.conformes, c.observados, c.defectuosos, c.validadoPor, c.validadoEn, c.observacion]),
+  ]);
+  return new NextResponse(cuerpo, {
+    headers: {
+      ...SIN_CACHE,
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="conteo-sacos-${f.tipo}-${fechaHoyPlanta()}.csv"`,
+      // Filas de datos exportadas (siempre todas las del filtro).
+      "X-Total-Filas": String(filas.length),
+    },
+  });
 }
 
 /** Campos en los que el registro guardado difiere del reenvío del mismo lote. */

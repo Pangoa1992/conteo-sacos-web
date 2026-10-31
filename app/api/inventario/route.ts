@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { sql, type SQL } from "drizzle-orm";
 import { usuarioDeSesion } from "@/lib/auth";
-import { ZONA_HORARIA_PLANTA } from "@/lib/conteos";
+import { ZONA_HORARIA_PLANTA, fechaHoyPlanta } from "@/lib/conteos";
 import {
   ETIQUETA_ESTADO_STOCK,
   construirCsv,
@@ -127,7 +127,7 @@ export async function GET(req: NextRequest) {
         l.cantidadSacos, l.conformes, l.observados, l.defectuosos, l.vendidos, l.ventasActivas, l.disponibles,
         ETIQUETA_ESTADO_STOCK[estadoStock(l.disponibles)], l.ventasHistoricas]),
     ]);
-    const nombre = `inventario-${f.tipo}-${new Date().toISOString().slice(0, 10)}.csv`;
+    const nombre = `inventario-${f.tipo}-${fechaHoyPlanta()}.csv`;
     return new NextResponse(cuerpo, {
       headers: {
         ...SIN_CACHE,

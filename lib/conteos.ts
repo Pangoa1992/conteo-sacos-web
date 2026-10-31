@@ -12,6 +12,14 @@ export function esOrigenPrueba(origen: string | null | undefined): boolean {
 /** Zona horaria de la planta: define qué es "hoy" para la producción diaria. */
 export const ZONA_HORARIA_PLANTA = "America/Lima";
 
+/**
+ * Fecha de hoy (AAAA-MM-DD) en la hora de la planta, para los nombres de archivo.
+ * No usar toISOString(): da la fecha UTC, que en Lima ya es "mañana" desde las 19:00.
+ */
+export function fechaHoyPlanta(ahora: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: ZONA_HORARIA_PLANTA, year: "numeric", month: "2-digit", day: "2-digit" }).format(ahora);
+}
+
 // A partir de esta diferencia entre el conteo automático y el reporte
 // del contratista, se marca como discrepancia (alerta).
 export const UMBRAL_DISCREPANCIA = 1;

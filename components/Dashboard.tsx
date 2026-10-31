@@ -13,6 +13,7 @@ import { BadgeValidacion, ValidacionConteo } from "./ValidacionConteo";
 import { EvidenciasConteo } from "./EvidenciasConteo";
 import { ESTADOS_VALIDACION, ETIQUETA_ESTADO_VALIDACION, type EstadoValidacion } from "@/lib/conteos";
 import type { FilaValidacion } from "@/lib/produccion-validada";
+import { parametrosHistorial } from "@/lib/historial";
 
 export type Conteo = {
   id: number;
@@ -121,6 +122,8 @@ export function Dashboard() {
   const [filtroHasta, setFiltroHasta] = useState("");
   const [soloDiscrepancias, setSoloDiscrepancias] = useState(false);
   const [filtroValidacion, setFiltroValidacion] = useState<EstadoValidacion | "">("");
+  const [exportando, setExportando] = useState(false);
+  const [errorExportar, setErrorExportar] = useState<string | null>(null);
 
   async function cargar() {
     try {
@@ -236,37 +239,38 @@ export function Dashboard() {
   const totalFiltrado = conteosFiltrados.reduce((sum, c) => sum + c.cantidadSacos, 0);
   const hayDiscrepanciasFiltradas = conteosFiltrados.some((c) => c.discrepancia);
 
-  function exportarCSV() {
-    const encabezado = ["ID", "Fecha", "Hora", "Sacos", "Tipo", "Camara/Origen", "Confianza (%)", "Contratista reporto", "Discrepancia",
-      "Validacion", "Conformes (manual)", "Observados (manual)", "Defectuosos (manual)", "Validado por", "Fecha validacion", "Observacion"];
-    const filas = conteosFiltrados.map((c) => [
-      c.id,
-      new Date(fechaDe(c)).toLocaleDateString("es-PE"),
-      new Date(fechaDe(c)).toLocaleTimeString("es-PE"),
-      c.cantidadSacos,
-      esPrueba(c) ? "PRUEBA" : "Real",
-      c.fuenteCamara ?? "",
-      confianzaNumerica(c.confianzaPromedio) ?? "",
-      c.reporteContratista?.cantidadReportada ?? "",
-      c.discrepancia ? "Si" : "No",
-      ETIQUETA_ESTADO_VALIDACION[estadoDe(c)],
-      c.sacosConformes ?? "",
-      c.sacosObservados ?? "",
-      c.sacosDefectuosos ?? "",
-      c.validadoPorNombre ?? "",
-      c.validadoEn ? new Date(c.validadoEn).toLocaleString("es-PE") : "",
-      c.observacionValidacion ?? "",
-    ]);
-    const csv = [encabezado, ...filas]
-      .map((fila) => fila.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `conteo-sacos-${vista}-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+  // El CSV lo genera el servidor con TODO el historial y los mismos filtros (la tabla solo
+  // muestra los últimos LIMITE_HISTORIAL). Si falla (p. ej. 413 por demasiados lotes) se avisa.
+  async function exportarCSV() {
+    const consulta = parametrosHistorial({
+      tipo: vista,
+      camara: filtroCamara.trim(),
+      desde: filtroDesde || null,
+      hasta: filtroHasta || null,
+      soloDiscrepancias,
+      validacion: filtroValidacion || null,
+    });
+    setExportando(true);
+    setErrorExportar(null);
+    try {
+      const res = await fetch(`/api/conteo?${consulta}&formato=csv`, { cache: "no-store" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setErrorExportar(data.error || "No se pudo exportar el historial.");
+        return;
+      }
+      const nombre = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") ?? "")?.[1] ?? "conteo-sacos.csv";
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = nombre;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setErrorExportar("Error de conexión al exportar. Intente nuevamente.");
+    } finally {
+      setExportando(false);
+    }
   }
 
   function limpiarFiltros() {
@@ -600,14 +604,20 @@ export function Dashboard() {
               <h2>Historial de conteos</h2>
               <p className="tarjeta-sub">
                 {conteosFiltrados.length} registro{conteosFiltrados.length !== 1 ? "s" : ""} · {fmt(totalFiltrado)} sacos
-                {hayFiltrosActivos ? " (con filtros)" : ""} · últimos {LIMITE_HISTORIAL} como máximo
+                {hayFiltrosActivos ? " (con filtros)" : ""} · la tabla muestra los últimos {LIMITE_HISTORIAL}; el CSV incluye todo el historial
                 {pendientesVista > 0 && <> · {pendientesVista} pendiente{pendientesVista !== 1 ? "s" : ""} de validación</>}
               </p>
             </div>
-            <button onClick={exportarCSV} className="btn-acento" disabled={conteosFiltrados.length === 0}>
-              Exportar CSV
+            <button
+              onClick={exportarCSV}
+              className="btn-acento"
+              disabled={conteosVista.length === 0 || exportando}
+              title="Exporta todo el historial con los filtros activos (fechas en hora de Lima)"
+            >
+              {exportando ? "Exportando…" : "Exportar CSV"}
             </button>
           </div>
+          {errorExportar && <p className="mensaje mensaje-error" role="alert">{errorExportar}</p>}
 
           <div className="filtros">
             <input

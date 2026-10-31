@@ -4,7 +4,7 @@ import { conteos, reportesContratista } from "@/db/schema";
 import { eq, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { verificarToken, NOMBRE_COOKIE_SESION, usuarioDeSesion } from "@/lib/auth";
-import { UMBRAL_DISCREPANCIA, ZONA_HORARIA_PLANTA, ETIQUETA_ESTADO_VALIDACION, type EstadoValidacion } from "@/lib/conteos";
+import { UMBRAL_DISCREPANCIA, ZONA_HORARIA_PLANTA, ETIQUETA_ESTADO_VALIDACION, fechaHoyPlanta, type EstadoValidacion } from "@/lib/conteos";
 import { construirCsv } from "@/lib/inventario";
 import {
   SIN_NOMBRE,
@@ -155,7 +155,7 @@ export async function GET(req: NextRequest) {
           ETIQUETA_ESTADO_VALIDACION[r.estadoValidacion as EstadoValidacion] ?? r.estadoValidacion,
           r.sacosConformes, r.sacosObservados, r.sacosDefectuosos, r.observacionValidacion])];
     }
-    const nombre = `reportes-contratista-${tabla}-${f.tipo}-${new Date().toISOString().slice(0, 10)}.csv`;
+    const nombre = `reportes-contratista-${tabla}-${f.tipo}-${fechaHoyPlanta()}.csv`;
     return new NextResponse(construirCsv(filas), {
       headers: {
         ...SIN_CACHE,
