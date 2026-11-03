@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { mensajeErrorBD } from "@/lib/errores-bd";
 import { db } from "@/db";
 import { conteos, reportesContratista, usuarios } from "@/db/schema";
 import { desc, eq, inArray, sql, type SQL } from "drizzle-orm";
@@ -217,7 +218,7 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ ...existente, duplicado: true }, { status: 200 });
   } catch (err) {
-    console.error("[conteo] Error de base de datos al registrar el conteo:", err instanceof Error ? err.message : err);
+    console.error("[conteo] Error de base de datos al registrar el conteo:", mensajeErrorBD(err));
     return NextResponse.json({ error: "Base de datos no disponible temporalmente" }, { status: 503 });
   }
 }

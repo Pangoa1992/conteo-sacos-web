@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { mensajeErrorBD } from "@/lib/errores-bd";
 import { db } from "@/db";
 import { evidencias } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -66,7 +67,7 @@ export async function POST(req: NextRequest, contexto: { params: Promise<{ id: s
     if (err instanceof Rechazo) {
       return NextResponse.json(err.cuerpo, { status: err.status });
     }
-    console.error("[evidencias] Error al anular la evidencia:", err instanceof Error ? err.message : err);
+    console.error("[evidencias] Error al anular la evidencia:", mensajeErrorBD(err));
     return NextResponse.json({ error: "No se pudo anular la evidencia" }, { status: 503 });
   }
 }

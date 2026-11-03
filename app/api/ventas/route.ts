@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { mensajeErrorBD } from "@/lib/errores-bd";
 import { db } from "@/db";
 import { ventas, ventasLote, conteos, usuarios } from "@/db/schema";
 import { desc, eq, sql } from "drizzle-orm";
@@ -252,7 +253,7 @@ export async function POST(req: NextRequest) {
     if (rechazoVenta) {
       return NextResponse.json({ error: rechazoVenta }, { status: 409 });
     }
-    console.error("[ventas] Error al registrar la venta:", err instanceof Error ? err.message : err);
+    console.error("[ventas] Error al registrar la venta:", mensajeErrorBD(err));
     return NextResponse.json({ error: "No se pudo registrar la venta" }, { status: 503 });
   }
 }

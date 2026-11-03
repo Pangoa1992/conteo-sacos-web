@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { mensajeErrorBD } from "@/lib/errores-bd";
 import twilio from "twilio";
 import { responderComando } from "@/lib/consultas-whatsapp";
 import { modoDemoWhatsappActivo } from "@/lib/modo-demo-whatsapp-servidor";
@@ -95,7 +96,7 @@ async function construirRespuesta(remitente: string | undefined, mensaje: string
     try {
       return marcarDemo(await responderComando(comando, "demo"));
     } catch (err) {
-      console.error(`[whatsapp] Error al responder «${comando.tipo}» (DEMO) a ${enmascararNumero(numero)}:`, err instanceof Error ? err.message : "error desconocido");
+      console.error(`[whatsapp] Error al responder «${comando.tipo}» (DEMO) a ${enmascararNumero(numero)}:`, mensajeErrorBD(err));
       return marcarDemo(TEXTO_ERROR);
     }
   }
@@ -107,7 +108,7 @@ async function construirRespuesta(remitente: string | undefined, mensaje: string
     return await responderComando(comando);
   } catch (err) {
     // Sin el número completo ni el texto recibido en el registro.
-    console.error(`[whatsapp] Error al responder «${comando.tipo}» a ${enmascararNumero(numero)}:`, err instanceof Error ? err.message : "error desconocido");
+    console.error(`[whatsapp] Error al responder «${comando.tipo}» a ${enmascararNumero(numero)}:`, mensajeErrorBD(err));
     return TEXTO_ERROR;
   }
 }

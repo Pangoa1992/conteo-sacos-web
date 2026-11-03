@@ -37,6 +37,9 @@ Los datos de prueba (`origen` que empieza por `prueba`) nunca se mezclan con los
 - Fotos: solo JPEG ≤ 1,5 MB y ≤ 1600 px, re-codificadas sin metadatos (EXIF/GPS) y con huella SHA-256.
 - CSV protegido contra inyección de fórmulas en Excel.
 - Secretos solo en variables de entorno (`.env.local`, nunca en el repositorio); claves de servicios externos nunca llegan al navegador.
+- Conexión a PostgreSQL con límites de tiempo (conexión 10 s, consulta 15 s, transacción abandonada 15 s): un fallo de la base devuelve un error en lugar de dejar la aplicación esperando.
+- Los registros de errores de la base muestran solo el mensaje de PostgreSQL, nunca la consulta ni sus parámetros (`lib/errores-bd.ts`).
+- Dependencias revisadas con `npm audit` (03/11/2026): quedan 2 avisos de `postcss`, incluido dentro de Next.js 15, que solo procesa el CSS propio del proyecto al compilar y no recibe datos de usuarios; su corrección exige Next.js 16 (riesgo aceptado y documentado).
 
 ## Requisitos
 

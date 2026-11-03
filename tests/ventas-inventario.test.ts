@@ -3,6 +3,8 @@ import {
   calcularImporte, centimosATexto, errorValidacionConVentas, esRechazoDeVentaEnBD, nuevaClaveIdempotencia, precioEnCentimos,
 } from "@/lib/ventas";
 import { celdaCsv, construirCsv, esFechaValida, estadoStock, leerFiltros } from "@/lib/inventario";
+import { mensajeErrorBD } from "@/lib/errores-bd";
+import { DrizzleQueryError } from "drizzle-orm/errors";
 
 describe("Importes de ventas sin errores de coma flotante", () => {
   it("convierte precios a céntimos y rechaza más de 2 decimales, cero o negativos", () => {
@@ -39,6 +41,21 @@ describe("Ventas y validación del lote", () => {
   it("reconoce el rechazo de los triggers de stock de PostgreSQL", () => {
     expect(esRechazoDeVentaEnBD(new Error("ERROR: venta: stock insuficiente en el lote 3"))).toBe("stock insuficiente en el lote 3");
     expect(esRechazoDeVentaEnBD(new Error("otra cosa"))).toBeNull();
+  });
+
+  it("lo reconoce también cuando drizzle envuelve el error (DrizzleQueryError, drizzle ≥ 0.44)", () => {
+    const envuelto = new DrizzleQueryError("insert into ventas_lote ...", ["Comprador S.A.", 26], new Error("venta: stock insuficiente en el lote 3"));
+    expect(esRechazoDeVentaEnBD(envuelto)).toBe("stock insuficiente en el lote 3");
+  });
+});
+
+describe("Registros de errores de la base de datos", () => {
+  it("registran solo el error original, nunca la consulta ni sus parámetros", () => {
+    const envuelto = new DrizzleQueryError("select * from usuarios where correo = $1", ["admin@macromec.local"], new Error("connection refused"));
+    expect(envuelto.message).toContain("admin@macromec.local"); // lo que se filtraría sin la protección
+    expect(mensajeErrorBD(envuelto)).toBe("connection refused");
+    expect(mensajeErrorBD(new Error("directo"))).toBe("directo");
+    expect(mensajeErrorBD(42)).toBe("error desconocido");
   });
 });
 

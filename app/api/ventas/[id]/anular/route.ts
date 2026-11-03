@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { mensajeErrorBD } from "@/lib/errores-bd";
 import { db } from "@/db";
 import { conteos, ventasLote } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -73,7 +74,7 @@ export async function PATCH(req: NextRequest, contexto: { params: Promise<{ id: 
     if (rechazoVenta) {
       return NextResponse.json({ error: rechazoVenta }, { status: 409 });
     }
-    console.error("[ventas] Error al anular la venta:", err instanceof Error ? err.message : err);
+    console.error("[ventas] Error al anular la venta:", mensajeErrorBD(err));
     return NextResponse.json({ error: "No se pudo anular la venta" }, { status: 503 });
   }
 }

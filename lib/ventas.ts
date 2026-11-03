@@ -7,6 +7,7 @@
  * disponible = conformes − ventas activas del lote. Anular una venta la deja
  * fuera de esa suma, así los sacos vuelven al stock sin duplicarse.
  */
+import { mensajeErrorBD } from "./errores-bd";
 
 export const LONGITUD_MAXIMA_COMPRADOR = 150;
 export const LONGITUD_MAXIMA_MOTIVO_ANULACION = 300;
@@ -67,7 +68,7 @@ export function nuevaClaveIdempotencia(): string {
 
 /** Los mensajes de los triggers de ventas empiezan por "venta:" (migración 0005). */
 export function esRechazoDeVentaEnBD(err: unknown): string | null {
-  const mensaje = err instanceof Error ? err.message : "";
+  const mensaje = mensajeErrorBD(err);
   const m = mensaje.match(/venta: (.*)$/);
   return m ? m[1] : null;
 }

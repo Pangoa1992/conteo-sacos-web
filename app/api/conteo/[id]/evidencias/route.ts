@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { mensajeErrorBD } from "@/lib/errores-bd";
 import { db } from "@/db";
 import { conteos, evidencias, evidenciasContenido, usuarios } from "@/db/schema";
 import { and, asc, count, eq, isNull } from "drizzle-orm";
@@ -201,7 +202,7 @@ export async function POST(req: NextRequest, contexto: { params: Promise<{ id: s
     if (err instanceof Rechazo) {
       return NextResponse.json(err.cuerpo, { status: err.status });
     }
-    console.error("[evidencias] Error al guardar la evidencia:", err instanceof Error ? err.message : err);
+    console.error("[evidencias] Error al guardar la evidencia:", mensajeErrorBD(err));
     return NextResponse.json({ error: "No se pudo guardar la evidencia" }, { status: 503 });
   }
 }

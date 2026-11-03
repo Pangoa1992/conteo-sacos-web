@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { mensajeErrorBD } from "@/lib/errores-bd";
 import { db } from "@/db";
 import { conteos, reportesContratista, usuarios, validacionesConteo } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
@@ -197,7 +198,7 @@ export async function PATCH(req: NextRequest, contexto: { params: Promise<{ id: 
     if (rechazoVenta) {
       return NextResponse.json({ error: "El lote tiene ventas activas", errores: [rechazoVenta] }, { status: 409 });
     }
-    console.error("[validacion] Error al registrar la validación:", err instanceof Error ? err.message : err);
+    console.error("[validacion] Error al registrar la validación:", mensajeErrorBD(err));
     return NextResponse.json({ error: "No se pudo registrar la validación" }, { status: 503 });
   }
 }
