@@ -13,10 +13,16 @@ Proyecto de innovación SENATI. El módulo de visión (RF-DETR + DeepSORT) está
 | Evidencias fotográficas desde el celular | sube y anula | ve las activas |
 | Reportes del contratista y discrepancias (\|diferencia\| > 1 saco) | registra | consulta |
 | Inventario de sacos conformes, ventas parciales, estado de WhatsApp | ✅ | — |
-| Contar sacos por foto (RF-DETR) | ✅ | — |
+| Contar sacos por foto (RF-DETR) y registrar el resultado como lote | ✅ | — |
 | Exportación CSV (historial completo, inventario, reportes) | ✅ | ✅ (lo que puede ver) |
 
 Los datos de prueba (`origen` que empieza por `prueba`) nunca se mezclan con los reales: el panel tiene vistas Reales / Prueba / Todos.
+
+### Contar por foto → lote
+
+1. `POST /api/contar-foto`: el servidor cuenta la foto con RF-DETR y devuelve el resultado y un **comprobante firmado** (HMAC derivado de `JWT_SECRET`) con el total, la confianza, la huella SHA-256 de la foto y el usuario; vence a los 30 minutos.
+2. `POST /api/contar-foto/registrar`: el navegador reenvía la misma foto con el comprobante y el tipo de dato (real → origen `foto`, prueba → `prueba_foto`). El servidor verifica firma, vigencia, usuario y huella, y en una sola transacción crea el lote **pendiente de validación** (fuente `foto_celular`) y guarda la foto como su **evidencia**. No vuelve a consultar el modelo.
+3. El total nunca lo envía el navegador. La misma foto no crea dos lotes (`id_externo = foto_` + huella): un reintento devuelve el lote existente; con otro tipo de dato, 409.
 
 ## Arquitectura
 
@@ -85,7 +91,7 @@ Las pruebas de integración (API con base de datos, interfaz en Chrome, capturas
 | `/api/conteo/:id/evidencias`, `/api/evidencias/:id/anular`, `/api/evidencias/:id/imagen` | Evidencias |
 | `/api/reportes-contratista`, `/api/reportes-contratista/lotes` | Reportes del contratista |
 | `GET /api/inventario`, `/api/ventas`, `/api/ventas/:id/anular` | Inventario y ventas |
-| `GET/POST /api/contar-foto` | Contar sacos por foto |
+| `GET/POST /api/contar-foto`, `POST /api/contar-foto/registrar` | Contar sacos por foto y registrar el lote |
 | `POST /api/whatsapp/webhook`, `GET /api/whatsapp/estado` | WhatsApp |
 
 ## Estado del despliegue

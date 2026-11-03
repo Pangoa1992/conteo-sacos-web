@@ -9,7 +9,8 @@ import {
   conteoFotoConfigurado,
   detectarSacos,
 } from "@/lib/conteo-foto-servidor";
-import type { EstadoConteoFoto } from "@/lib/conteo-foto";
+import type { EstadoConteoFoto, RespuestaConteoFoto } from "@/lib/conteo-foto";
+import { firmarRegistro, huellaFoto } from "@/lib/registro-foto";
 
 // Lee la configuración del servidor en cada petición (no se congela en el build).
 export const dynamic = "force-dynamic";
@@ -18,11 +19,11 @@ export const dynamic = "force-dynamic";
 const BYTES_MAXIMOS_PETICION = BYTES_MAXIMOS_FOTO + 64 * 1024;
 const SIN_CACHE = { "Cache-Control": "no-store" };
 
-async function soloAdmin(req: NextRequest): Promise<NextResponse | null> {
+async function soloAdmin(req: NextRequest): Promise<{ rechazo: NextResponse } | { usuarioId: number }> {
   const usuario = await usuarioDeSesion(req);
-  if (!usuario) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  if (usuario.rol !== "admin_macromec") return NextResponse.json({ error: "No autorizado" }, { status: 403 });
-  return null;
+  if (!usuario) return { rechazo: NextResponse.json({ error: "No autenticado" }, { status: 401 }) };
+  if (usuario.rol !== "admin_macromec") return { rechazo: NextResponse.json({ error: "No autorizado" }, { status: 403 }) };
+  return { usuarioId: usuario.id };
 }
 
 /**
@@ -31,8 +32,8 @@ async function soloAdmin(req: NextRequest): Promise<NextResponse | null> {
  * de MACROMEC. Nunca devuelve la clave ni la URL del servicio de detección.
  */
 export async function GET(req: NextRequest) {
-  const rechazo = await soloAdmin(req);
-  if (rechazo) return rechazo;
+  const acceso = await soloAdmin(req);
+  if ("rechazo" in acceso) return acceso.rechazo;
   const estado: EstadoConteoFoto = {
     disponible: conteoFotoConfigurado(),
     modelo: ROBOFLOW_MODEL_ID,
@@ -43,16 +44,17 @@ export async function GET(req: NextRequest) {
 
 /**
  * POST /api/contar-foto  (multipart/form-data, campo «foto»: JPEG ≤ 1,5 MB y ≤ 1600 px)
- * Cuenta los sacos de la foto con RF-DETR y devuelve el total, la confianza y las
- * cajas. Solo personal de MACROMEC. NO guarda la foto ni el resultado y NO crea
- * lotes: no usa la base de datos.
+ * Cuenta los sacos de la foto con RF-DETR y devuelve el total, la confianza, las
+ * cajas y un comprobante firmado («registro») para registrar el resultado como lote
+ * con POST /api/contar-foto/registrar. Solo personal de MACROMEC. Este paso NO guarda
+ * la foto ni el resultado y NO usa la base de datos.
  *
  *   200 resultado · 400 imagen inválida · 401/403 sesión o rol · 413 demasiado grande
  *   502 el servicio de detección falló · 503 sin configurar o sin conexión
  */
 export async function POST(req: NextRequest) {
-  const rechazo = await soloAdmin(req);
-  if (rechazo) return rechazo;
+  const acceso = await soloAdmin(req);
+  if ("rechazo" in acceso) return acceso.rechazo;
 
   if (!conteoFotoConfigurado()) {
     return NextResponse.json(
@@ -77,9 +79,10 @@ export async function POST(req: NextRequest) {
   }
 
   // Misma validación que las evidencias: JPEG íntegro, sin metadatos y con la orientación aplicada.
+  const recibida = Buffer.from(await foto.arrayBuffer());
   let procesada;
   try {
-    procesada = await procesarFoto(Buffer.from(await foto.arrayBuffer()));
+    procesada = await procesarFoto(recibida);
   } catch (err) {
     if (err instanceof FotoInvalida) {
       return NextResponse.json({ error: err.message }, { status: 400, headers: SIN_CACHE });
@@ -89,7 +92,18 @@ export async function POST(req: NextRequest) {
 
   try {
     const resultado = await detectarSacos(procesada.imagen, procesada.ancho, procesada.alto);
-    return NextResponse.json(resultado, { headers: SIN_CACHE });
+    // Una foto sin sacos no es un lote: no se emite comprobante.
+    const registro = resultado.total > 0
+      ? firmarRegistro({
+        sha256: huellaFoto(recibida),
+        total: resultado.total,
+        confianzaPromedio: resultado.confianzaPromedio,
+        usuarioId: acceso.usuarioId,
+        emitidoEn: Date.now(),
+      })
+      : null;
+    const respuesta: RespuestaConteoFoto = { ...resultado, registro };
+    return NextResponse.json(respuesta, { headers: SIN_CACHE });
   } catch (err) {
     if (err instanceof DeteccionNoDisponible) {
       return NextResponse.json({ error: err.message }, { status: err.status, headers: SIN_CACHE });

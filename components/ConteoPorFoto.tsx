@@ -2,29 +2,40 @@
 
 import { useEffect, useState } from "react";
 import { comprimirFoto } from "@/lib/compresion-foto";
-import type { EstadoConteoFoto, ResultadoConteoFoto } from "@/lib/conteo-foto";
+import type { EstadoConteoFoto, LoteRegistradoFoto, RespuestaConteoFoto } from "@/lib/conteo-foto";
+import { LONGITUD_MAXIMA_DESCRIPCION } from "@/lib/evidencias";
 
 type Props = {
   visible: boolean; // el estado se consulta la primera vez que se abre el módulo
+  onRegistrado?: () => void; // recarga el panel al crear un lote
 };
+
+type TipoDato = "real" | "prueba";
 
 const porcentaje = (fraccion: number) =>
   `${(fraccion * 100).toLocaleString("es-PE", { maximumFractionDigits: 1 })} %`;
 
 /**
- * Contar sacos en una fotografía (fase 1). Solo lo ve el personal de MACROMEC.
+ * Contar sacos en una fotografía. Solo lo ve el personal de MACROMEC.
  * La foto se toma con la cámara del celular o se elige de la galería o del equipo,
  * se reduce en el navegador y el servidor la cuenta con RF-DETR (POST /api/contar-foto).
- * Se muestra la foto con las cajas, el total y la confianza. No se guarda nada
- * ni se crean lotes: el conteo oficial sigue siendo el del sistema de visión.
+ * Se muestra la foto con las cajas, el total y la confianza. Si el personal lo decide,
+ * el resultado se registra como un lote pendiente de validación y la foto queda como su
+ * evidencia (POST /api/contar-foto/registrar); el total lo fija el servidor.
  */
-export function ConteoPorFoto({ visible }: Props) {
+export function ConteoPorFoto({ visible, onRegistrado }: Props) {
   const [estado, setEstado] = useState<EstadoConteoFoto | null>(null);
   const [errorEstado, setErrorEstado] = useState<string | null>(null);
   const [foto, setFoto] = useState<string | null>(null); // URL local de la foto reducida
-  const [resultado, setResultado] = useState<ResultadoConteoFoto | null>(null);
+  const [blobFoto, setBlobFoto] = useState<Blob | null>(null); // la misma foto que se contó, para registrarla
+  const [resultado, setResultado] = useState<RespuestaConteoFoto | null>(null);
   const [procesando, setProcesando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tipo, setTipo] = useState<TipoDato | null>(null);
+  const [descripcion, setDescripcion] = useState("");
+  const [registrando, setRegistrando] = useState(false);
+  const [registrado, setRegistrado] = useState<LoteRegistradoFoto | null>(null);
+  const [errorRegistro, setErrorRegistro] = useState<string | null>(null);
 
   useEffect(() => {
     if (!visible || estado) return;
@@ -58,11 +69,17 @@ export function ConteoPorFoto({ visible }: Props) {
     if (!archivo) return;
     setError(null);
     setFoto(null);
+    setBlobFoto(null);
     setResultado(null);
+    setTipo(null);
+    setDescripcion("");
+    setRegistrado(null);
+    setErrorRegistro(null);
     setProcesando(true);
     try {
       const comprimida = await comprimirFoto(archivo);
       setFoto(URL.createObjectURL(comprimida.blob));
+      setBlobFoto(comprimida.blob);
       const datos = new FormData();
       datos.append("foto", comprimida.blob, "foto.jpg");
       const res = await fetch("/api/contar-foto", { method: "POST", body: datos });
@@ -79,6 +96,32 @@ export function ConteoPorFoto({ visible }: Props) {
     }
   }
 
+  async function registrar(e: React.FormEvent) {
+    e.preventDefault();
+    if (!resultado?.registro || !blobFoto || !tipo || registrando || registrado) return;
+    setErrorRegistro(null);
+    setRegistrando(true);
+    try {
+      const datos = new FormData();
+      datos.append("foto", blobFoto, "foto.jpg");
+      datos.append("registro", resultado.registro);
+      datos.append("tipo", tipo);
+      if (descripcion.trim()) datos.append("descripcion", descripcion.trim());
+      const res = await fetch("/api/contar-foto/registrar", { method: "POST", body: datos });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErrorRegistro(data.error || "No se pudo registrar el lote.");
+        return;
+      }
+      setRegistrado(data);
+      onRegistrado?.();
+    } catch {
+      setErrorRegistro("Error de conexión. Intente nuevamente: la foto no se registrará dos veces.");
+    } finally {
+      setRegistrando(false);
+    }
+  }
+
   const disponible = estado?.disponible === true;
   const r = resultado;
   // Tamaño del texto de las cajas en píxeles de la imagen (se ve igual en celular y computadora).
@@ -91,7 +134,7 @@ export function ConteoPorFoto({ visible }: Props) {
           <h2>Contar sacos por foto</h2>
           <p className="tarjeta-sub">
             Tome una foto con el celular o elija una imagen del equipo. El modelo RF-DETR marca cada saco detectado.
-            El resultado solo se muestra: no se guarda ni crea lotes.
+            Si lo decide, el resultado se registra como un lote pendiente de validación, con la foto como evidencia.
           </p>
         </div>
       </div>
@@ -161,9 +204,47 @@ export function ConteoPorFoto({ visible }: Props) {
                 {r.total === 0 && " No se detectaron sacos: pruebe con una foto más cercana y con buena luz."}
               </p>
               <p className="validacion-nota">
-                Conteo de referencia: no se registra en el historial ni modifica el inventario. El modelo detecta sacos,
-                no evalúa su calidad.
+                El modelo detecta sacos, no evalúa su calidad. Mientras no lo registre, este conteo no aparece en el
+                historial ni modifica el inventario.
               </p>
+
+              {r.registro && (
+                <form className="conteo-foto-registro" onSubmit={registrar}>
+                  <fieldset className="validacion-estados" disabled={registrando || !!registrado}>
+                    <legend>Registrar como lote · {r.total} saco{r.total === 1 ? "" : "s"}</legend>
+                    {(["real", "prueba"] as const).map((op) => (
+                      <label key={op} className={`opcion-estado ${tipo === op ? "activa" : ""}`}>
+                        <input type="radio" name="tipo-dato-foto" value={op} checked={tipo === op} onChange={() => setTipo(op)} />
+                        {op === "real" ? "Dato real" : "Dato de prueba"}
+                      </label>
+                    ))}
+                  </fieldset>
+                  <label className="campo">
+                    <span>Descripción de la evidencia (opcional)</span>
+                    <input
+                      type="text"
+                      maxLength={LONGITUD_MAXIMA_DESCRIPCION}
+                      value={descripcion}
+                      onChange={(e) => setDescripcion(e.target.value)}
+                      placeholder="Ej.: fila 3 de la zona de embolsado"
+                      disabled={registrando || !!registrado}
+                    />
+                  </label>
+                  <button type="submit" className="btn-acento" disabled={!tipo || registrando || !!registrado}>
+                    {registrando ? "Registrando…" : "Registrar lote"}
+                  </button>
+                  {!tipo && !registrado && <span className="tenue">Elija si es un dato real o de prueba.</span>}
+                </form>
+              )}
+              {registrado && (
+                <p className="mensaje mensaje-ok" role="status">
+                  {registrado.yaRegistrado
+                    ? `Esta foto ya estaba registrada como lote #${registrado.lote.id} (no se duplicó).`
+                    : `Lote #${registrado.lote.id} registrado con ${registrado.lote.cantidadSacos} sacos, pendiente de validación; la foto quedó como evidencia.`}
+                  {" "}Valídelo desde el Historial.
+                </p>
+              )}
+              {errorRegistro && <p className="mensaje mensaje-error" role="alert">{errorRegistro}</p>}
             </div>
           )}
         </div>

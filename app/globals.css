@@ -1106,6 +1106,11 @@ a.btn-acento.deshabilitado { opacity: 0.5; cursor: default; pointer-events: none
 /* .kpi-hero ocupa 2 filas (o 2 columnas en celular) en los indicadores: aquí va en una sola columna. */
 .conteo-foto-datos .kpi-hero { grid-row: auto; grid-column: auto; }
 .conteo-foto-datos .validacion-nota { margin: 0; }
+/* Fase 2: registrar el resultado como lote. */
+.conteo-foto-registro { display: grid; gap: 0.7rem; padding-top: 0.8rem; border-top: 1px solid var(--linea); }
+.conteo-foto-registro fieldset { border: 0; padding: 0; margin: 0; }
+.conteo-foto-registro .campo input { width: 100%; }
+.conteo-foto-registro .btn-acento { justify-self: start; }
 @media (max-width: 600px) {
   .conteo-foto-figura { flex-basis: 100%; }
 }

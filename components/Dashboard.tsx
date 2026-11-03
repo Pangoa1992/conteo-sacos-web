@@ -784,9 +784,9 @@ export function Dashboard() {
             <div hidden={oculto("whatsapp")}>
             <EstadoWhatsapp recarga={actualizadoEn} />
             </div>
-            {/* Contar por foto (fase 1): solo muestra el resultado; no guarda ni crea lotes. */}
+            {/* Contar por foto: muestra el resultado y, si el personal lo decide, lo registra como lote pendiente. */}
             <div hidden={oculto("foto")}>
-            <ConteoPorFoto visible={!oculto("foto")} />
+            <ConteoPorFoto visible={!oculto("foto")} onRegistrado={cargar} />
             </div>
           </>
         )}
