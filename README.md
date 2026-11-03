@@ -1,93 +1,98 @@
 # conteo-sacos-web
 
-Módulo web (backend + frontend) del Sistema de Conteo de Sacos — MACROMEC.
+Plataforma web del **Sistema de Conteo de Sacos mediante Visión Computacional** (MACROMEC J&S S.A.C.): recibe los lotes que cuenta el módulo de visión, los compara con el reporte del contratista y permite validarlos, documentarlos con evidencias fotográficas y llevar el inventario y las ventas de sacos conformes.
 
-## 🌐 Demo en vivo
+Proyecto de innovación SENATI. El módulo de visión (RF-DETR + DeepSORT) está en el repositorio `contador-sacos`.
 
-**https://conteo-sacos-web.vercel.app**
+## Módulos
 
-Las credenciales de acceso se entregan de forma privada (no se publican en el repositorio).
-Roles: `admin_macromec` (personal MACROMEC: ve todo, incluido contratistas y ventas) y
-`cliente` (dueño de la fábrica: solo ve el conteo y su historial).
+| Módulo | Personal MACROMEC (`admin_macromec`) | Cliente (`cliente`) |
+|---|---|---|
+| Resumen, producción validada, producción diaria, cámaras, historial | ✅ | ✅ |
+| Validación de lotes y clasificación manual (conformes / observados / defectuosos) | registra | consulta |
+| Evidencias fotográficas desde el celular | sube y anula | ve las activas |
+| Reportes del contratista y discrepancias (\|diferencia\| > 1 saco) | registra | consulta |
+| Inventario de sacos conformes, ventas parciales, estado de WhatsApp | ✅ | — |
+| Contar sacos por foto (RF-DETR) | ✅ | — |
+| Exportación CSV (historial completo, inventario, reportes) | ✅ | ✅ (lo que puede ver) |
 
-## Estado actual
+Los datos de prueba (`origen` que empieza por `prueba`) nunca se mezclan con los reales: el panel tiene vistas Reales / Prueba / Todos.
 
-✅ **Funcionando en producción**, conectado a una base de datos real (PostgreSQL en Neon):
-- Login con autenticación JWT y roles diferenciados (personal MACROMEC vs. dueño de fábrica).
-- Dashboard (`/`) con el conteo más reciente, historial de registros reales, y alertas visuales cuando hay discrepancia entre el conteo automático y el reporte del contratista.
-- Módulo de venta (visible solo para personal MACROMEC): registra ventas a partir de un conteo y calcula el total automáticamente.
-- `GET /api/conteo` — historial de conteos, con el reporte del contratista y si hay discrepancia.
-- `POST /api/conteo` — usado por el módulo de Python (`conteo-sacos-vision`) para enviar resultados; ya probado end-to-end.
-- `GET/POST /api/ventas` — listar y registrar ventas (requiere rol admin_macromec).
-- `POST /api/reportes-contratista` — registra lo que el contratista dice haber armado, para comparar contra el conteo automático.
+## Arquitectura
 
-🔧 **Ampliación local, aún no desplegada (etapa 3B, migraciones 0005-0006)** — ventas parciales:
-- `GET /api/ventas` — ventas parciales, stock por lote aprobado y, aparte, las ventas históricas (anteriores al control de validación, de solo lectura).
-- `POST /api/ventas` — `{ conteoId, cantidadSacos, precioUnitario, comprador?, claveIdempotencia }`: vende sacos conformes de un lote aprobado; el importe lo calcula el servidor. La misma `claveIdempotencia` (UUID por operación) no crea una segunda venta.
-- `PATCH /api/ventas/:id/anular` — `{ motivo }`: anula la venta y los sacos vuelven al stock.
-- Todas requieren rol admin_macromec. Sustituyen al contrato anterior de `POST /api/ventas` (`{ conteoId, precioPorSaco }`, lote completo).
+- **Next.js 15 (App Router) + React 19 + TypeScript**: páginas y API REST en el mismo proyecto.
+- **PostgreSQL** con **Drizzle ORM**: 8 tablas, 12 claves foráneas, restricciones CHECK y 14 triggers (stock, ventas históricas congeladas, evidencias sin borrado). Migraciones en `db/migrations` (0000–0006).
+- **Módulo de visión (Python)** → `POST /api/conteo` con token, idempotente por `id_externo`.
+- **Roboflow Serverless** (RF-DETR) para Contar por foto, solo desde el servidor.
+- **Twilio** (WhatsApp) mediante webhook firmado.
 
-⚠️ El **número de sacos** que se muestra todavía es simulado (aleatorio), porque el modelo de detección real (YOLOv8) está pendiente de fotos/video reales de la fábrica para poder entrenarse/adaptarse.
+## Seguridad
 
-## Cómo correrlo localmente
+- Sesión **JWT HS256** (7 días) en cookie `HttpOnly`, `SameSite=Lax` y `Secure` (única excepción: la demostración local por HTTP en red privada, que exige una variable y una base de demostración); sin `JWT_SECRET` (≥ 32 caracteres) no se emiten ni aceptan sesiones.
+- Contraseñas con **bcrypt**; nunca en texto plano.
+- **Permisos por rol comprobados en el servidor** en cada ruta de la API (401 sin sesión, 403 sin permiso), no solo ocultando botones.
+- `POST /api/conteo` exige `VISION_API_TOKEN` (comparación en tiempo constante); sin token configurado responde 503.
+- Webhook de WhatsApp: firma `X-Twilio-Signature` obligatoria y lista blanca de números; los números se registran enmascarados.
+- Validación de entradas en servidor y en base de datos (CHECK y triggers); idempotencia en lotes y ventas.
+- Fotos: solo JPEG ≤ 1,5 MB y ≤ 1600 px, re-codificadas sin metadatos (EXIF/GPS) y con huella SHA-256.
+- CSV protegido contra inyección de fórmulas en Excel.
+- Secretos solo en variables de entorno (`.env.local`, nunca en el repositorio); claves de servicios externos nunca llegan al navegador.
+
+## Requisitos
+
+- Node.js 20 o superior (probado con 24), npm.
+- PostgreSQL 16+ (local con Docker: `docker-compose.yml`, puerto 5433).
+
+## Instalación local
 
 ```bash
 npm install
-npm run dev
+cp .env.example .env.local        # completar las variables (ver comentarios del archivo)
+docker compose --env-file .env.local up -d   # PostgreSQL local
+# drizzle-kit no lee .env.local: exportar DATABASE_URL antes de migrar
+npm run db:migrate
+npm run dev                        # http://localhost:3000
 ```
 
-Abrir http://localhost:3000
+Usuarios de desarrollo (solo local, definidos en `DEV_*` de `.env.local`):
 
-## Configurar base de datos (PostgreSQL)
-
-1. Copiar `.env.example` a `.env.local` y completar todas las variables obligatorias
-   (`DATABASE_URL`, `JWT_SECRET`, `VISION_API_TOKEN`; `TWILIO_AUTH_TOKEN` y `WHATSAPP_NUMEROS_AUTORIZADOS` para WhatsApp;
-   `ROBOFLOW_API_KEY` para Contar por foto).
-   Para desarrollo local se puede levantar PostgreSQL en el puerto 5433 con
-   `docker compose --env-file .env.local up -d` (ver `docker-compose.yml`).
-2. Aplicar las migraciones (`drizzle-kit` no lee `.env.local`, hay que exportar `DATABASE_URL`):
 ```bash
-   npm run db:migrate
-```
-3. Crear los usuarios de desarrollo (definidos en `DEV_*_CORREO` / `DEV_*_PASSWORD`),
-   solo en local:
-```bash
-   curl -X POST http://localhost:3000/api/dev/seed-usuarios -H "X-Dev-Seed-Secret: $DEV_SEED_SECRET"
+curl -X POST http://localhost:3000/api/dev/seed-usuarios -H "X-Dev-Seed-Secret: $DEV_SEED_SECRET"
 ```
 
-## Contar sacos por foto
+## Calidad
 
-Módulo «Contar por foto» (solo administrador): se toma una foto con la cámara del celular o se elige una imagen del
-equipo; el navegador la reduce a 1600 px como máximo y `POST /api/contar-foto` la cuenta con el mismo modelo RF-DETR
-del detector Python (Roboflow, confianza mínima 0,50, clase «Saco»). Se muestra la foto con las cajas detectadas, el
-total y la confianza. El resultado **no se guarda** ni crea lotes: el conteo oficial sigue siendo el del sistema de
-visión. Requiere `ROBOFLOW_API_KEY`, que se usa solo en el servidor; sin ella el módulo indica que no está configurado.
-Cada foto es una consulta a Roboflow (necesita internet). El modelo detecta sacos, no evalúa su calidad.
+| Comando | Qué comprueba |
+|---|---|
+| `npm run typecheck` | Tipos de TypeScript en todo el proyecto |
+| `npm run lint` | ESLint con las reglas oficiales de Next.js (React, hooks, TypeScript) |
+| `npm test` | Pruebas unitarias (Vitest) de las reglas de negocio y de seguridad en `tests/` |
+| `npm run verificar` | Las tres anteriores |
 
-## Consultas por WhatsApp
+Las pruebas de integración (API con base de datos, interfaz en Chrome, capturas) se ejecutan con las herramientas de `D:\RESPALDOS_MACROMEC\herramientas_pruebas` sobre bases de datos de ensayo, y cada ejecución deja su evidencia con huellas SHA-256.
 
-El webhook `POST /api/whatsapp/webhook` (Twilio) exige la firma `X-Twilio-Signature` y solo responde a los números de
-`WHATSAPP_NUMEROS_AUTORIZADOS` (formato internacional, separados por comas). Si la lista está vacía, nadie recibe datos.
-Comandos (sin importar mayúsculas ni tildes): `ayuda`, `último`, `hoy`, `semana`, `discrepancias`, `lote 123`.
-Solo informa datos reales (nunca de prueba) y nunca ventas ni inventario. Los números se registran enmascarados.
+## API principal
 
-Modo DEMO (solo para la demostración local): responde con los lotes de prueba de `conteo_sacos_demo`, cada respuesta
-marcada «🧪 DEMO · datos de prueba». Se activa únicamente con una variable que pone el script de la demostración
-(nunca en `.env.local`, `.env.example` ni Vercel), con la BD local `conteo_sacos_demo` marcada como demostración y sin
-ningún lote real; si falta cualquier condición, responde como siempre. Ver `lib/modo-demo-whatsapp.ts`.
+| Ruta | Uso |
+|---|---|
+| `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me` | Sesión |
+| `GET /api/conteo` (`?formato=csv`), `GET /api/conteo/resumen` | Historial e indicadores |
+| `POST /api/conteo` | Registro de lotes desde el módulo de visión (token) |
+| `PATCH/GET /api/conteo/:id/validacion` | Validación y su historial |
+| `/api/conteo/:id/evidencias`, `/api/evidencias/:id/anular`, `/api/evidencias/:id/imagen` | Evidencias |
+| `/api/reportes-contratista`, `/api/reportes-contratista/lotes` | Reportes del contratista |
+| `GET /api/inventario`, `/api/ventas`, `/api/ventas/:id/anular` | Inventario y ventas |
+| `GET/POST /api/contar-foto` | Contar sacos por foto |
+| `POST /api/whatsapp/webhook`, `GET /api/whatsapp/estado` | WhatsApp |
 
-El panel del administrador muestra el estado de la integración (`GET /api/whatsapp/estado`, solo administrador): webhook
-habilitado, tipo de URL pública, cantidad de números autorizados, si hay conteos reales y si está en modo DEMO. Nunca
-muestra el token, los números, la URL pública ni datos de la conexión.
+## Estado del despliegue
 
-## Despliegue
+- La versión descrita aquí funciona en **entorno local y de demostración** (rama `cierre/dashboard-macromec-fases-1-4`).
+- La publicación en Vercel (`main`) corresponde a una **versión anterior con datos simulados** y solo las migraciones 0000–0001; desplegar esta versión requiere aplicar las migraciones 0002–0006 en la base de producción y configurar las variables nuevas.
 
-Publicado en **Vercel**, conectado directamente al repositorio de GitHub — cada `git push` a `main` genera un nuevo despliegue automático.
+## Limitaciones conocidas
 
-## Pendiente
-
-- [x] Validar `VISION_API_TOKEN` en `POST /api/conteo` (obligatorio; sin él responde 503)
-- [ ] Reemplazar `/api/dev/seed-usuarios` por un panel real de gestión de usuarios (o eliminarlo) antes de usar el sistema con datos reales
-- [ ] Reemplazar detección simulada por modelo YOLOv8 real (`conteo-sacos-vision`)
-- [ ] Chatbot de WhatsApp para consultas remotas (Fase 2 — bloqueado hasta tener acceso a WhatsApp Business API)
-- [ ] Gráficos de tendencia histórica (Fase 3)
+- El conteo automático se ha probado con videos y fotografías grabados; la **exactitud frente a un conteo manual está pendiente de validación** y no hay cámara fija instalada en planta.
+- WhatsApp está implementado y probado con simulaciones firmadas, pero el servicio de Twilio no está conectado.
+- El modelo detecta una sola clase («Saco»); la calidad la clasifica una persona.
+- `/api/dev/seed-usuarios` es solo para desarrollo (deshabilitado en producción y sin `DEV_SEED_SECRET`).

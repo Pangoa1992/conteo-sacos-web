@@ -179,10 +179,10 @@ export function Dashboard() {
   }
 
   // En modo simulado (sin BD) todo se trata como dato de prueba.
-  const esPrueba = (c: { esPrueba?: boolean }) => modoSimulado || !!c.esPrueba;
+  const esPrueba = useCallback((c: { esPrueba?: boolean }) => modoSimulado || !!c.esPrueba, [modoSimulado]);
   const enVista = useCallback((prueba: boolean) => vista === "todos" || (vista === "prueba") === prueba, [vista]);
 
-  const conteosVista = useMemo(() => conteos.filter((c) => enVista(esPrueba(c))), [conteos, vista, modoSimulado]);
+  const conteosVista = useMemo(() => conteos.filter((c) => enVista(esPrueba(c))), [conteos, enVista, esPrueba]);
   const ultimo = conteosVista[0];
   const hayReales = conteos.some((c) => !esPrueba(c));
   const cantidadPrueba = conteos.filter((c) => esPrueba(c)).length;
@@ -291,7 +291,7 @@ export function Dashboard() {
     esPrueba: esPrueba(c),
     estadoValidacion: estadoDe(c),
     reporteVigente: c.reporteContratista ?? null,
-  })), [conteosVista]);
+  })), [conteosVista, esPrueba]);
 
   const secciones = [
     { id: "resumen", texto: "Resumen" },

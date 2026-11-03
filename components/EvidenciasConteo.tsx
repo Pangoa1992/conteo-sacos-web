@@ -56,6 +56,8 @@ export function EvidenciasConteo({ conteoId, esAdmin }: Props) {
 
   useEffect(() => {
     cargar();
+    // cargar solo depende de conteoId: se vuelve a consultar al cambiar de lote.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conteoId]);
 
   // Libera la vista previa al cambiarla o al cerrar la fila.

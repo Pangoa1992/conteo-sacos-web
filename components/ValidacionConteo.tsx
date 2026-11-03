@@ -96,6 +96,8 @@ export function ValidacionConteo({ conteo, esAdmin, onValidado }: Props) {
 
   useEffect(() => {
     cargarHistorial();
+    // cargarHistorial solo depende de conteo.id; estadoActual y validadoEn fuerzan la recarga tras validar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conteo.id, estadoActual, conteo.validadoEn]);
 
   const camposClasificacion = [conformes, observados, defectuosos];
