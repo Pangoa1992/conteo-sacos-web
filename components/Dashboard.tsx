@@ -11,6 +11,8 @@ import { GraficoProduccion, etiquetaDia, type DiaProduccion } from "./GraficoPro
 import { ProduccionValidada, type FilaValidacionDiaria } from "./ProduccionValidada";
 import { BadgeValidacion, ValidacionConteo } from "./ValidacionConteo";
 import { EvidenciasConteo } from "./EvidenciasConteo";
+import { UsuariosModule } from "./UsuariosModule";
+import { MiCuenta } from "./MiCuenta";
 import { ESTADOS_VALIDACION, ETIQUETA_ESTADO_VALIDACION, type EstadoValidacion } from "@/lib/conteos";
 import type { FilaValidacion } from "@/lib/produccion-validada";
 import { parametrosHistorial } from "@/lib/historial";
@@ -149,6 +151,12 @@ export function Dashboard() {
   async function cargarUsuario() {
     const res = await fetch("/api/auth/me", { cache: "no-store" });
     const data = await res.json();
+    // Sesión revocada (cuenta desactivada, contraseña o rol cambiados) o vencida: volver al login.
+    // Recarga completa: no quedan en pantalla los datos de la sesión anterior.
+    if (res.ok && !data.usuario) {
+      window.location.assign("/login");
+      return;
+    }
     setUsuario(data.usuario);
   }
 
@@ -300,7 +308,8 @@ export function Dashboard() {
     { id: "camaras", texto: "Cámaras" },
     { id: "historial", texto: "Historial" },
     { id: "contratistas", texto: "Contratistas" },
-    ...(esAdmin ? [{ id: "inventario", texto: "Inventario" }, { id: "ventas", texto: "Ventas" }, { id: "whatsapp", texto: "WhatsApp" }, { id: "foto", texto: "Contar por foto" }] : []),
+    ...(esAdmin ? [{ id: "inventario", texto: "Inventario" }, { id: "ventas", texto: "Ventas" }, { id: "whatsapp", texto: "WhatsApp" }, { id: "foto", texto: "Contar por foto" }, { id: "usuarios", texto: "Usuarios" }] : []),
+    ...(usuario ? [{ id: "cuenta", texto: "Mi cuenta" }] : []),
   ];
 
   // Navegación por módulos: el menú cambia el hash (#historial…) y el área principal muestra solo ese
@@ -788,8 +797,13 @@ export function Dashboard() {
             <div hidden={oculto("foto")}>
             <ConteoPorFoto visible={!oculto("foto")} onRegistrado={cargar} />
             </div>
+            {/* Usuarios: alta, rol, contraseña nueva y desactivar (solo personal de MACROMEC). Se monta al abrirlo. */}
+            {!oculto("usuarios") && <UsuariosModule />}
           </>
         )}
+
+        {/* Mi cuenta: cambio de la contraseña propia (todos los roles). */}
+        {usuario && !oculto("cuenta") && <MiCuenta usuario={usuario} />}
 
         <footer className="pie">MACROMEC J&amp;S S.A.C. · Sistema de conteo automatizado de sacos</footer>
       </main>

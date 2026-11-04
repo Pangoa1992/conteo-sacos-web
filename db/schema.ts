@@ -121,6 +121,10 @@ export const usuarios = pgTable("usuarios", {
   passwordHash: varchar("password_hash", { length: 255 }).notNull(),
   rol: varchar("rol", { length: 30 }).notNull().default("cliente"), // admin_macromec | cliente
   creadoEn: timestamp("creado_en").notNull().defaultNow(),
+  // Módulo de usuarios: una cuenta desactivada no puede iniciar sesión y sus sesiones abiertas dejan de valer.
+  activo: boolean("activo").notNull().default(true),
+  // Sube al desactivar, cambiar el rol o cambiar la contraseña: invalida los JWT emitidos antes.
+  sesionVersion: integer("sesion_version").notNull().default(0),
 });
 
 /**

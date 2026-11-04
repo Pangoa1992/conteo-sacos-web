@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { usuarios } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { autenticacionConfigurada, crearToken, NOMBRE_COOKIE_SESION, opcionesCookieSesion } from "@/lib/auth";
 import { compararPassword, hashearPassword } from "@/lib/password";
+import { normalizarCorreo } from "@/lib/usuarios";
 
 const loginSchema = z.object({
   correo: z.string().email(),
@@ -43,9 +44,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { correo, password } = parsed.data;
+  const { password } = parsed.data;
+  const correo = normalizarCorreo(parsed.data.correo);
 
-  const [usuario] = await db.select().from(usuarios).where(eq(usuarios.correo, correo)).limit(1);
+  // Sin distinguir mayúsculas: las cuentas nuevas se guardan en minúsculas, las antiguas pueden no estarlo.
+  const [usuario] = await db.select().from(usuarios).where(sql`lower(${usuarios.correo}) = ${correo}`).limit(1);
 
   if (!usuario) {
     hashFicticio ??= hashearPassword("usuario-inexistente");
@@ -58,12 +61,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Credenciales incorrectas" }, { status: 401 });
   }
 
-  const token = await crearToken({
-    id: usuario.id,
-    nombre: usuario.nombre,
-    correo: usuario.correo,
-    rol: usuario.rol as "admin_macromec" | "cliente",
-  });
+  // Solo después de una contraseña correcta: así no se revela qué cuentas existen.
+  if (!usuario.activo) {
+    return NextResponse.json({ error: "Esta cuenta está desactivada. Consulte al administrador de MACROMEC." }, { status: 403 });
+  }
+
+  const token = await crearToken(
+    {
+      id: usuario.id,
+      nombre: usuario.nombre,
+      correo: usuario.correo,
+      rol: usuario.rol as "admin_macromec" | "cliente",
+    },
+    usuario.sesionVersion
+  );
 
   const respuesta = NextResponse.json({
     nombre: usuario.nombre,

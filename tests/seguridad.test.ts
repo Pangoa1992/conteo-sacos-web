@@ -16,7 +16,7 @@ describe("Sesión JWT (lib/auth)", () => {
   it("sin JWT_SECRET la autenticación queda deshabilitada (falla de forma segura)", async () => {
     delete process.env.JWT_SECRET;
     expect(autenticacionConfigurada()).toBe(false);
-    await expect(crearToken(ADMIN)).rejects.toThrow();
+    await expect(crearToken(ADMIN, 0)).rejects.toThrow();
     expect(await verificarToken("cualquier.cosa.firmada")).toBeNull();
   });
 
@@ -25,22 +25,32 @@ describe("Sesión JWT (lib/auth)", () => {
     expect(autenticacionConfigurada()).toBe(false);
   });
 
-  it("emite y verifica un token con los datos y el rol del usuario", async () => {
+  it("emite y verifica un token con los datos, el rol y la versión de sesión del usuario", async () => {
     process.env.JWT_SECRET = SECRETO;
-    const token = await crearToken(ADMIN);
-    expect(await verificarToken(token)).toEqual(ADMIN);
+    const token = await crearToken(ADMIN, 3);
+    expect(await verificarToken(token)).toEqual({ ...ADMIN, sv: 3 });
+  });
+
+  it("un token antiguo sin versión de sesión equivale a la versión 0", async () => {
+    process.env.JWT_SECRET = SECRETO;
+    const { SignJWT } = await import("jose");
+    const antiguo = await new SignJWT({ ...ADMIN })
+      .setProtectedHeader({ alg: "HS256" })
+      .setExpirationTime("1h")
+      .sign(new TextEncoder().encode(SECRETO));
+    expect(await verificarToken(antiguo)).toEqual({ ...ADMIN, sv: 0 });
   });
 
   it("rechaza un token firmado con otra clave", async () => {
     process.env.JWT_SECRET = SECRETO;
-    const token = await crearToken(ADMIN);
+    const token = await crearToken(ADMIN, 0);
     process.env.JWT_SECRET = "x".repeat(48);
     expect(await verificarToken(token)).toBeNull();
   });
 
   it("rechaza un token alterado (escalada de rol)", async () => {
     process.env.JWT_SECRET = SECRETO;
-    const token = await crearToken({ ...ADMIN, rol: "cliente" });
+    const token = await crearToken({ ...ADMIN, rol: "cliente" }, 0);
     const [cab, carga, firma] = token.split(".");
     const datos = JSON.parse(Buffer.from(carga, "base64url").toString());
     const alterada = Buffer.from(JSON.stringify({ ...datos, rol: "admin_macromec" })).toString("base64url");
@@ -49,7 +59,7 @@ describe("Sesión JWT (lib/auth)", () => {
 
   it("rechaza un token con un rol desconocido", async () => {
     process.env.JWT_SECRET = SECRETO;
-    const token = await crearToken({ ...ADMIN, rol: "superusuario" as SesionUsuario["rol"] });
+    const token = await crearToken({ ...ADMIN, rol: "superusuario" as SesionUsuario["rol"] }, 0);
     expect(await verificarToken(token)).toBeNull();
   });
 });

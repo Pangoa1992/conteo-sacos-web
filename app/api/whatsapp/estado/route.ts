@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
-import { usuarioDeSesion } from "@/lib/auth";
+import { usuarioDeSesion } from "@/lib/sesion-servidor";
 import { estadoConfiguracionWhatsapp, type EstadoWhatsapp } from "@/lib/estado-whatsapp";
 import { modoDemoWhatsappActivo } from "@/lib/modo-demo-whatsapp-servidor";
 

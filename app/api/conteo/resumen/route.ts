@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { conteos } from "@/db/schema";
 import { sql } from "drizzle-orm";
 import { ZONA_HORARIA_PLANTA, type EstadoValidacion } from "@/lib/conteos";
+import { usuarioDeSesion } from "@/lib/sesion-servidor";
 
 // Sin esto, Next 14 trata este GET (no lee la petición) como estático y en el
 // build lo congela con los datos de ese momento.
@@ -44,7 +45,12 @@ const COLUMNAS_VALIDACION = {
  *   - validacion: totales por estado de todo el historial (producción validada).
  * No calcula ni estima nada que no esté en la base de datos.
  */
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
+  // El middleware solo comprueba la firma del token; aquí además que la cuenta siga activa.
+  if (!(await usuarioDeSesion(req))) {
+    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  }
+
   if (!process.env.DATABASE_URL) {
     return NextResponse.json({ modoSimulado: true, hoy: null, diario: [], diarioPorEstado: [], validacion: [], fuentes: [] });
   }

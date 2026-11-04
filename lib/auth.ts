@@ -28,27 +28,40 @@ export function autenticacionConfigurada(): boolean {
   return obtenerClave() !== null;
 }
 
-/** Genera un JWT firmado con los datos básicos del usuario (válido 7 días). */
-export async function crearToken(usuario: SesionUsuario): Promise<string> {
+/** Sesión leída del JWT: el usuario y la versión de sesión con la que se emitió. */
+export type SesionToken = SesionUsuario & { sv: number };
+
+/**
+ * Genera un JWT firmado con los datos básicos del usuario (válido 7 días).
+ * `sesionVersion` es usuarios.sesion_version al emitirlo: si después sube (cuenta
+ * desactivada, rol o contraseña cambiados), el token deja de valer en el servidor.
+ */
+export async function crearToken(usuario: SesionUsuario, sesionVersion: number): Promise<string> {
   const clave = obtenerClave();
   if (!clave) {
     throw new Error("JWT_SECRET no configurado o demasiado corto");
   }
-  return await new SignJWT({ ...usuario })
+  const { id, nombre, correo, rol } = usuario;
+  return await new SignJWT({ id, nombre, correo, rol, sv: sesionVersion })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("7d")
     .sign(clave);
 }
 
-/** Verifica un JWT y devuelve los datos del usuario, o null si no es válido/expiró. */
-export async function verificarToken(token: string): Promise<SesionUsuario | null> {
+/**
+ * Verifica la FIRMA y la vigencia de un JWT y devuelve sus datos, o null.
+ * No consulta la base: sirve para el middleware (Edge). Las rutas de la API deben
+ * usar usuarioDeSesion (lib/sesion-servidor.ts), que además comprueba que la
+ * cuenta siga activa y que la sesión no se haya revocado.
+ */
+export async function verificarToken(token: string): Promise<SesionToken | null> {
   const clave = obtenerClave();
   if (!clave) return null;
 
   try {
     const { payload } = await jwtVerify(token, clave, { algorithms: ["HS256"] });
-    const { id, nombre, correo, rol } = payload as Record<string, unknown>;
+    const { id, nombre, correo, rol, sv } = payload as Record<string, unknown>;
 
     if (
       typeof id !== "number" ||
@@ -59,7 +72,9 @@ export async function verificarToken(token: string): Promise<SesionUsuario | nul
       return null;
     }
 
-    return { id, nombre, correo, rol: rol as SesionUsuario["rol"] };
+    // Tokens emitidos antes del módulo de usuarios no traen «sv»: equivalen a la versión 0.
+    const version = typeof sv === "number" && Number.isInteger(sv) && sv >= 0 ? sv : 0;
+    return { id, nombre, correo, rol: rol as SesionUsuario["rol"], sv: version };
   } catch {
     return null;
   }
@@ -142,8 +157,3 @@ export function opcionesCookieSesion(req: { nextUrl: URL; headers: Headers }) {
   return { httpOnly: true, secure: cookieSesionSegura(req), sameSite: "lax" as const, path: "/" };
 }
 
-/** Usuario de la cookie de sesión de la petición, o null si no hay sesión válida. */
-export async function usuarioDeSesion(req: { cookies: { get(nombre: string): { value: string } | undefined } }): Promise<SesionUsuario | null> {
-  const token = req.cookies.get(NOMBRE_COOKIE_SESION)?.value;
-  return token ? await verificarToken(token) : null;
-}

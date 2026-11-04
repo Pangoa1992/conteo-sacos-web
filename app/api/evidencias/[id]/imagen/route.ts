@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { evidencias, evidenciasContenido } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { usuarioDeSesion } from "@/lib/auth";
+import { usuarioDeSesion } from "@/lib/sesion-servidor";
 
 /**
  * GET /api/evidencias/:id/imagen?tam=miniatura|completa

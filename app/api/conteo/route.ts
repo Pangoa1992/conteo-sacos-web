@@ -5,7 +5,7 @@ import { conteos, reportesContratista, usuarios } from "@/db/schema";
 import { desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { compararSecreto, extraerBearer } from "@/lib/seguridad";
-import { usuarioDeSesion } from "@/lib/auth";
+import { usuarioDeSesion } from "@/lib/sesion-servidor";
 import {
   ETIQUETA_ESTADO_VALIDACION,
   UMBRAL_DISCREPANCIA,
@@ -72,6 +72,11 @@ const conteoInputSchema = z.object({
  */
 export async function GET(req: NextRequest) {
   if (req.nextUrl.searchParams.get("formato") === "csv") return exportarCsv(req);
+
+  // El middleware solo comprueba la firma del token; aquí además que la cuenta siga activa.
+  if (!(await usuarioDeSesion(req))) {
+    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  }
 
   if (!process.env.DATABASE_URL) {
     return NextResponse.json({

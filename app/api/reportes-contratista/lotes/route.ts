@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { sql, type SQL } from "drizzle-orm";
-import { usuarioDeSesion } from "@/lib/auth";
+import { usuarioDeSesion } from "@/lib/sesion-servidor";
 import { ZONA_HORARIA_PLANTA, type EstadoValidacion } from "@/lib/conteos";
 import { TIPOS_DATO, esFechaValida, type TipoDato } from "@/lib/inventario";
 import { ordenVigenciaReporteSql } from "@/lib/reportes-contratista-servidor";

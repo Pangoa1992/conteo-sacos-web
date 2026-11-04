@@ -15,8 +15,17 @@ Proyecto de innovación SENATI. El módulo de visión (RF-DETR + DeepSORT) está
 | Inventario de sacos conformes, ventas parciales, estado de WhatsApp | ✅ | — |
 | Contar sacos por foto (RF-DETR) y registrar el resultado como lote | ✅ | — |
 | Exportación CSV (historial completo, inventario, reportes) | ✅ | ✅ (lo que puede ver) |
+| Usuarios: alta de cuentas, nombre y rol, contraseña nueva, desactivar / activar | ✅ | — |
+| Mi cuenta: cambiar la contraseña propia (pide la actual) | ✅ | ✅ |
 
 Los datos de prueba (`origen` que empieza por `prueba`) nunca se mezclan con los reales: el panel tiene vistas Reales / Prueba / Todos.
+
+### Usuarios
+
+- Solo el personal de MACROMEC crea cuentas, cambia nombre y rol, asigna una contraseña nueva a quien la olvidó y **desactiva** cuentas (no se borran: sus registros se conservan).
+- Nadie puede desactivarse ni cambiarse el rol a sí mismo, y **siempre queda al menos un administrador activo** (se comprueba con bloqueo de filas en la transacción, sin carreras).
+- Desactivar, cambiar el rol o cambiar la contraseña **cierra de inmediato** las sesiones abiertas de esa cuenta (`usuarios.sesion_version`, incluida en el JWT y comprobada en cada petición). Al cambiar la propia contraseña, la sesión actual sigue abierta y las demás se cierran.
+- Contraseñas: mínimo 10 caracteres, máximo 72 bytes (límite de bcrypt), sin espacios al inicio o al final, no repetitivas, distintas del correo y de las contraseñas que fueron públicas. Correos sin distinguir mayúsculas.
 
 ### Contar por foto → lote
 
@@ -27,7 +36,7 @@ Los datos de prueba (`origen` que empieza por `prueba`) nunca se mezclan con los
 ## Arquitectura
 
 - **Next.js 15 (App Router) + React 19 + TypeScript**: páginas y API REST en el mismo proyecto.
-- **PostgreSQL** con **Drizzle ORM**: 8 tablas, 12 claves foráneas, restricciones CHECK y 14 triggers (stock, ventas históricas congeladas, evidencias sin borrado). Migraciones en `db/migrations` (0000–0006).
+- **PostgreSQL** con **Drizzle ORM**: 8 tablas, 12 claves foráneas, restricciones CHECK y 14 triggers (stock, ventas históricas congeladas, evidencias sin borrado). Migraciones en `db/migrations` (0000–0007).
 - **Módulo de visión (Python)** → `POST /api/conteo` con token, idempotente por `id_externo`.
 - **Roboflow Serverless** (RF-DETR) para Contar por foto, solo desde el servidor.
 - **Twilio** (WhatsApp) mediante webhook firmado.
@@ -35,7 +44,8 @@ Los datos de prueba (`origen` que empieza por `prueba`) nunca se mezclan con los
 ## Seguridad
 
 - Sesión **JWT HS256** (7 días) en cookie `HttpOnly`, `SameSite=Lax` y `Secure` (única excepción: la demostración local por HTTP en red privada, que exige una variable y una base de demostración); sin `JWT_SECRET` (≥ 32 caracteres) no se emiten ni aceptan sesiones.
-- Contraseñas con **bcrypt**; nunca en texto plano.
+- Contraseñas con **bcrypt**; nunca en texto plano ni en las respuestas de la API.
+- Cada ruta de la API comprueba en la base que la cuenta siga **activa** y que la sesión no se haya revocado (`lib/sesion-servidor.ts`); el middleware solo verifica la firma del token. Una cuenta desactivada recibe 401 en la siguiente petición.
 - **Permisos por rol comprobados en el servidor** en cada ruta de la API (401 sin sesión, 403 sin permiso), no solo ocultando botones.
 - `POST /api/conteo` exige `VISION_API_TOKEN` (comparación en tiempo constante); sin token configurado responde 503.
 - Webhook de WhatsApp: firma `X-Twilio-Signature` obligatoria y lista blanca de números; los números se registran enmascarados.
@@ -85,6 +95,8 @@ Las pruebas de integración (API con base de datos, interfaz en Chrome, capturas
 | Ruta | Uso |
 |---|---|
 | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me` | Sesión |
+| `POST /api/auth/cambiar-password` | Cambiar la contraseña propia |
+| `GET/POST /api/usuarios`, `PATCH /api/usuarios/:id`, `POST /api/usuarios/:id/password` | Usuarios (solo administrador) |
 | `GET /api/conteo` (`?formato=csv`), `GET /api/conteo/resumen` | Historial e indicadores |
 | `POST /api/conteo` | Registro de lotes desde el módulo de visión (token) |
 | `PATCH/GET /api/conteo/:id/validacion` | Validación y su historial |

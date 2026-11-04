@@ -50,6 +50,13 @@
       "when": 1793044521246,
       "tag": "0006_etapa3b_idempotencia_ventas",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793804622595,
+      "tag": "0007_modulo_usuarios",
+      "breakpoints": true
     }
   ]
 }

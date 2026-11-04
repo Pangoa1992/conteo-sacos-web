@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { usuarioDeSesion } from "@/lib/auth";
+import { usuarioDeSesion } from "@/lib/sesion-servidor";
 import { BYTES_MAXIMOS_FOTO } from "@/lib/evidencias";
 import { FotoInvalida, procesarFoto } from "@/lib/evidencias-servidor";
 import {

@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { conteos, reportesContratista, usuarios, validacionesConteo } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
-import { verificarToken, NOMBRE_COOKIE_SESION } from "@/lib/auth";
+import { usuarioDeSesion } from "@/lib/sesion-servidor";
 import { ORDEN_VIGENCIA_REPORTE } from "@/lib/reportes-contratista-servidor";
 import {
   ESTADOS_VALIDACION,
@@ -41,9 +41,12 @@ function leerId(param: string): number | null {
 /**
  * GET /api/conteo/:id/validacion
  * Historial de revisiones del conteo, de la más reciente a la más antigua.
- * Lo pueden ver todos los usuarios con sesión (middleware).
+ * Lo pueden ver todos los usuarios con sesión vigente (cuenta activa).
  */
-export async function GET(_req: NextRequest, contexto: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, contexto: { params: Promise<{ id: string }> }) {
+  if (!(await usuarioDeSesion(req))) {
+    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  }
   const params = await contexto.params;
   const id = leerId(params.id);
   if (!id) {
@@ -90,8 +93,7 @@ export async function GET(_req: NextRequest, contexto: { params: Promise<{ id: s
  */
 export async function PATCH(req: NextRequest, contexto: { params: Promise<{ id: string }> }) {
   const params = await contexto.params;
-  const token = req.cookies.get(NOMBRE_COOKIE_SESION)?.value;
-  const usuario = token ? await verificarToken(token) : null;
+  const usuario = await usuarioDeSesion(req);
 
   if (!usuario) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });

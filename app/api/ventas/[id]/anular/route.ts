@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { conteos, ventasLote } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { verificarToken, NOMBRE_COOKIE_SESION } from "@/lib/auth";
+import { usuarioDeSesion } from "@/lib/sesion-servidor";
 import { LONGITUD_MAXIMA_MOTIVO_ANULACION, esRechazoDeVentaEnBD } from "@/lib/ventas";
 import { sacosVendidosActivos } from "@/lib/ventas-servidor";
 
@@ -28,8 +28,7 @@ function leerId(param: string): number | null {
  */
 export async function PATCH(req: NextRequest, contexto: { params: Promise<{ id: string }> }) {
   const params = await contexto.params;
-  const token = req.cookies.get(NOMBRE_COOKIE_SESION)?.value;
-  const usuario = token ? await verificarToken(token) : null;
+  const usuario = await usuarioDeSesion(req);
   if (!usuario) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   }

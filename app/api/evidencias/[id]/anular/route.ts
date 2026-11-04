@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { evidencias } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { usuarioDeSesion } from "@/lib/auth";
+import { usuarioDeSesion } from "@/lib/sesion-servidor";
 import { LONGITUD_MAXIMA_MOTIVO } from "@/lib/evidencias";
 
 const anulacionSchema = z.object({

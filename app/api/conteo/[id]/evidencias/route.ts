@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { conteos, evidencias, evidenciasContenido, usuarios } from "@/db/schema";
 import { and, asc, count, eq, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { usuarioDeSesion } from "@/lib/auth";
+import { usuarioDeSesion } from "@/lib/sesion-servidor";
 import {
   BYTES_MAXIMOS_FOTO,
   LONGITUD_MAXIMA_DESCRIPCION,

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { conteos, evidencias, evidenciasContenido } from "@/db/schema";
-import { usuarioDeSesion } from "@/lib/auth";
+import { usuarioDeSesion } from "@/lib/sesion-servidor";
 import { mensajeErrorBD } from "@/lib/errores-bd";
 import { BYTES_MAXIMOS_FOTO, LONGITUD_MAXIMA_DESCRIPCION } from "@/lib/evidencias";
 import { FotoInvalida, procesarFoto } from "@/lib/evidencias-servidor";

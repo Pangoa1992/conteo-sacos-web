@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { conteos, reportesContratista } from "@/db/schema";
 import { eq, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
-import { verificarToken, NOMBRE_COOKIE_SESION, usuarioDeSesion } from "@/lib/auth";
+import { usuarioDeSesion } from "@/lib/sesion-servidor";
 import { UMBRAL_DISCREPANCIA, ZONA_HORARIA_PLANTA, ETIQUETA_ESTADO_VALIDACION, fechaHoyPlanta, type EstadoValidacion } from "@/lib/conteos";
 import { construirCsv } from "@/lib/inventario";
 import {
@@ -216,8 +216,7 @@ const reporteSchema = z.object({
  * Solo personal de MACROMEC (rol admin_macromec), igual que en el dashboard.
  */
 export async function POST(req: NextRequest) {
-  const token = req.cookies.get(NOMBRE_COOKIE_SESION)?.value;
-  const usuario = token ? await verificarToken(token) : null;
+  const usuario = await usuarioDeSesion(req);
 
   if (!usuario) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });

@@ -5,7 +5,7 @@ import { ventas, ventasLote, conteos, usuarios } from "@/db/schema";
 import { desc, eq, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
-import { verificarToken, NOMBRE_COOKIE_SESION } from "@/lib/auth";
+import { usuarioDeSesion } from "@/lib/sesion-servidor";
 import { esOrigenPrueba } from "@/lib/conteos";
 import { LONGITUD_MAXIMA_COMPRADOR, calcularImporte, esRechazoDeVentaEnBD, precioEnCentimos } from "@/lib/ventas";
 import { sacosVendidosActivos } from "@/lib/ventas-servidor";
@@ -45,8 +45,7 @@ class Rechazo extends Error {
 }
 
 async function usuarioAdmin(req: NextRequest) {
-  const token = req.cookies.get(NOMBRE_COOKIE_SESION)?.value;
-  const usuario = token ? await verificarToken(token) : null;
+  const usuario = await usuarioDeSesion(req);
   if (!usuario) return { respuesta: NextResponse.json({ error: "No autenticado" }, { status: 401 }) };
   if (usuario.rol !== "admin_macromec") return { respuesta: NextResponse.json({ error: "No autorizado" }, { status: 403 }) };
   return { usuario };
