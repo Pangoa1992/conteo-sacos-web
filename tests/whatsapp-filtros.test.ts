@@ -37,6 +37,19 @@ describe("Números autorizados de WhatsApp", () => {
     expect(contarEntradasNoValidas("+51987654321, 123,")).toBe(1);
   });
 
+  it("acepta el identificador privado de WhatsApp («PE.…») en lugar del teléfono, comparado exacto", () => {
+    expect(normalizarNumero("whatsapp:PE.1111111111111111")).toBe("PE.1111111111111111");
+    expect(normalizarNumero(" PE.1111111111111111 ")).toBe("PE.1111111111111111");
+    expect(normalizarNumero("pe.1111111111111111")).toBeNull();
+    expect(normalizarNumero("PE.123")).toBeNull();
+    expect(normalizarNumero("PE.11111 11111111111")).toBeNull();
+    const lista = leerNumerosAutorizados("+51987654321, PE.1111111111111111");
+    expect([...lista]).toEqual(["+51987654321", "PE.1111111111111111"]);
+    expect(lista.has(normalizarNumero("whatsapp:PE.1111111111111111")!)).toBe(true);
+    expect(lista.has(normalizarNumero("whatsapp:PE.1111111111111112")!)).toBe(false);
+    expect(contarEntradasNoValidas("PE.1111111111111111, PE.1")).toBe(1);
+  });
+
   it("lista vacía = nadie recibe datos", () => {
     expect(leerNumerosAutorizados(undefined).size).toBe(0);
     expect(leerNumerosAutorizados("").size).toBe(0);
@@ -45,6 +58,7 @@ describe("Números autorizados de WhatsApp", () => {
   it("los números nunca se registran completos", () => {
     expect(enmascararNumero("+51987654321")).toBe("+51•••••••21");
     expect(enmascararNumero("basura")).toBe("(número no válido)");
+    expect(enmascararNumero("whatsapp:PE.1111111111111111")).toBe("PE.•••11");
   });
 });
 

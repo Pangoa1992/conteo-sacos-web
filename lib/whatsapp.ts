@@ -65,9 +65,20 @@ export function interpretarComando(texto: string): Comando {
   return { tipo: "saludo" };
 }
 
-/** Número de WhatsApp en formato internacional (+ y 8 a 15 dígitos), o null. */
+/**
+ * Identificador privado que WhatsApp envía en lugar del teléfono cuando el usuario lo oculta
+ * («whatsapp:PE.1111111111111111»): código de país ISO, punto y el identificador propio de la cuenta.
+ */
+const IDENTIFICADOR_WHATSAPP = /^[A-Z]{2}\.[A-Za-z0-9]{6,128}$/;
+
+/**
+ * Remitente de WhatsApp normalizado, o null: número internacional (+ y 8 a 15 dígitos)
+ * o identificador privado de WhatsApp («PE.1111…»), que se compara exacto.
+ */
 export function normalizarNumero(valor: string | null | undefined): string | null {
-  const limpio = (valor ?? "").trim().replace(/^whatsapp:/i, "").replace(/[\s\-().]/g, "");
+  const sinPrefijo = (valor ?? "").trim().replace(/^whatsapp:/i, "").trim();
+  if (IDENTIFICADOR_WHATSAPP.test(sinPrefijo)) return sinPrefijo;
+  const limpio = sinPrefijo.replace(/[\s\-().]/g, "");
   return /^\+\d{8,15}$/.test(limpio) ? limpio : null;
 }
 
@@ -89,10 +100,11 @@ export function contarEntradasNoValidas(valor: string | null | undefined): numbe
   return (valor ?? "").split(SEPARADOR_NUMEROS).filter((parte) => parte.trim() !== "" && !normalizarNumero(parte)).length;
 }
 
-/** Número para registros: código de país y dos últimas cifras («+51•••••••34»). */
+/** Número para registros: código de país y dos últimas cifras («+51•••••••34», «PE.•••11»). */
 export function enmascararNumero(valor: string | null | undefined): string {
   const n = normalizarNumero(valor);
   if (!n) return "(número no válido)";
+  if (!n.startsWith("+")) return `${n.slice(0, 3)}•••${n.slice(-2)}`;
   return `${n.slice(0, 3)}${"•".repeat(n.length - 5)}${n.slice(-2)}`;
 }
 
