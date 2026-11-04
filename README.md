@@ -96,12 +96,13 @@ Las pruebas de integración (API con base de datos, interfaz en Chrome, capturas
 
 ## Estado del despliegue
 
-- La versión descrita aquí funciona en **entorno local y de demostración** (rama `cierre/dashboard-macromec-fases-1-4`).
+- La versión descrita aquí funciona en **entorno local y de demostración** (rama `cierre/dashboard-macromec-fases-1-4`). Probado de punta a punta el 04/11/2026: detector con video real → `POST` de lote (HTTP 201) → lote pendiente de validación.
 - La publicación en Vercel (`main`) corresponde a una **versión anterior con datos simulados** y solo las migraciones 0000–0001; desplegar esta versión requiere aplicar las migraciones 0002–0006 en la base de producción y configurar las variables nuevas.
 
 ## Limitaciones conocidas
 
-- El conteo automático se ha probado con videos y fotografías grabados; la **exactitud frente a un conteo manual está pendiente de validación** y no hay cámara fija instalada en planta.
-- WhatsApp está implementado y probado con simulaciones firmadas, pero el servicio de Twilio no está conectado.
+- El conteo automático se ha probado con videos y fotografías grabados; no hay cámara fija instalada en planta.
+- Exactitud del conteo por foto frente a un conteo manual a ciegas (10 fotos, todos los sacos visibles): 84,9 % por foto, error absoluto medio 3,1 sacos, con tendencia a contar de menos los sacos del fondo. Esas fotos se usaron en el entrenamiento, así que es un límite superior: falta repetir la prueba con fotos nuevas.
+- WhatsApp se probó con el Sandbox real de Twilio (04/11/2026, modo DEMO, firma verificada). WhatsApp puede enviar un identificador privado (`whatsapp:PE.…`) en lugar del teléfono: en ese caso se autoriza ese identificador en `WHATSAPP_NUMEROS_AUTORIZADOS`. El Sandbox exige reenviar `join <código>` cada 72 horas; para uso continuo hace falta un remitente de WhatsApp aprobado.
 - El modelo detecta una sola clase («Saco»); la calidad la clasifica una persona.
 - `/api/dev/seed-usuarios` es solo para desarrollo (deshabilitado en producción y sin `DEV_SEED_SECRET`).
