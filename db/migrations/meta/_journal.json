@@ -57,6 +57,13 @@
       "when": 1793804622595,
       "tag": "0007_modulo_usuarios",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793917773817,
+      "tag": "0008_login_intentos",
+      "breakpoints": true
     }
   ]
 }

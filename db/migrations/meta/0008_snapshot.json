@@ -1,0 +1,781 @@
+{
+  "id": "ce3c2781-2661-4647-ab06-ed2d56963fe9",
+  "prevId": "2b582878-3e5e-4992-9c97-01ba3667c4d7",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.conteos": {
+      "name": "conteos",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "cantidad_sacos": {
+          "name": "cantidad_sacos",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "origen": {
+          "name": "origen",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'vision_ip'"
+        },
+        "fuente_camara": {
+          "name": "fuente_camara",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "confianza_promedio": {
+          "name": "confianza_promedio",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "id_externo": {
+          "name": "id_externo",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "contado_en": {
+          "name": "contado_en",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "creado_en": {
+          "name": "creado_en",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "estado_validacion": {
+          "name": "estado_validacion",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pendiente'"
+        },
+        "sacos_conformes": {
+          "name": "sacos_conformes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sacos_observados": {
+          "name": "sacos_observados",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sacos_defectuosos": {
+          "name": "sacos_defectuosos",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "validado_por": {
+          "name": "validado_por",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "validado_en": {
+          "name": "validado_en",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "observacion_validacion": {
+          "name": "observacion_validacion",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "conteos_validado_por_usuarios_id_fk": {
+          "name": "conteos_validado_por_usuarios_id_fk",
+          "tableFrom": "conteos",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "validado_por"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "conteos_id_externo_unique": {
+          "name": "conteos_id_externo_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id_externo"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.evidencias": {
+      "name": "evidencias",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "conteo_id": {
+          "name": "conteo_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "descripcion": {
+          "name": "descripcion",
+          "type": "varchar(200)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sha256": {
+          "name": "sha256",
+          "type": "char(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mime": {
+          "name": "mime",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'image/jpeg'"
+        },
+        "bytes": {
+          "name": "bytes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ancho": {
+          "name": "ancho",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "alto": {
+          "name": "alto",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bytes_miniatura": {
+          "name": "bytes_miniatura",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tomada_en": {
+          "name": "tomada_en",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "subido_por": {
+          "name": "subido_por",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subido_en": {
+          "name": "subido_en",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "anulada_en": {
+          "name": "anulada_en",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "anulada_por": {
+          "name": "anulada_por",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "motivo_anulacion": {
+          "name": "motivo_anulacion",
+          "type": "varchar(300)",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "evidencias_conteo_id_conteos_id_fk": {
+          "name": "evidencias_conteo_id_conteos_id_fk",
+          "tableFrom": "evidencias",
+          "tableTo": "conteos",
+          "columnsFrom": [
+            "conteo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "evidencias_subido_por_usuarios_id_fk": {
+          "name": "evidencias_subido_por_usuarios_id_fk",
+          "tableFrom": "evidencias",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "subido_por"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "evidencias_anulada_por_usuarios_id_fk": {
+          "name": "evidencias_anulada_por_usuarios_id_fk",
+          "tableFrom": "evidencias",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "anulada_por"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.evidencias_contenido": {
+      "name": "evidencias_contenido",
+      "schema": "",
+      "columns": {
+        "evidencia_id": {
+          "name": "evidencia_id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "imagen": {
+          "name": "imagen",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "miniatura": {
+          "name": "miniatura",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "evidencias_contenido_evidencia_id_evidencias_id_fk": {
+          "name": "evidencias_contenido_evidencia_id_evidencias_id_fk",
+          "tableFrom": "evidencias_contenido",
+          "tableTo": "evidencias",
+          "columnsFrom": [
+            "evidencia_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.reportes_contratista": {
+      "name": "reportes_contratista",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "cantidad_reportada": {
+          "name": "cantidad_reportada",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nombre_contratista": {
+          "name": "nombre_contratista",
+          "type": "varchar(150)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "conteo_id": {
+          "name": "conteo_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "creado_en": {
+          "name": "creado_en",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "reportes_contratista_conteo_id_conteos_id_fk": {
+          "name": "reportes_contratista_conteo_id_conteos_id_fk",
+          "tableFrom": "reportes_contratista",
+          "tableTo": "conteos",
+          "columnsFrom": [
+            "conteo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.usuarios": {
+      "name": "usuarios",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "nombre": {
+          "name": "nombre",
+          "type": "varchar(150)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "correo": {
+          "name": "correo",
+          "type": "varchar(150)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "password_hash": {
+          "name": "password_hash",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rol": {
+          "name": "rol",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'cliente'"
+        },
+        "creado_en": {
+          "name": "creado_en",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "activo": {
+          "name": "activo",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "sesion_version": {
+          "name": "sesion_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "intentos_fallidos": {
+          "name": "intentos_fallidos",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "bloqueado_hasta": {
+          "name": "bloqueado_hasta",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "usuarios_correo_unique": {
+          "name": "usuarios_correo_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "correo"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.validaciones_conteo": {
+      "name": "validaciones_conteo",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "conteo_id": {
+          "name": "conteo_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "estado_anterior": {
+          "name": "estado_anterior",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "estado": {
+          "name": "estado",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sacos_conformes": {
+          "name": "sacos_conformes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sacos_observados": {
+          "name": "sacos_observados",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sacos_defectuosos": {
+          "name": "sacos_defectuosos",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "observacion": {
+          "name": "observacion",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "usuario_id": {
+          "name": "usuario_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "creado_en": {
+          "name": "creado_en",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "validaciones_conteo_conteo_id_conteos_id_fk": {
+          "name": "validaciones_conteo_conteo_id_conteos_id_fk",
+          "tableFrom": "validaciones_conteo",
+          "tableTo": "conteos",
+          "columnsFrom": [
+            "conteo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "validaciones_conteo_usuario_id_usuarios_id_fk": {
+          "name": "validaciones_conteo_usuario_id_usuarios_id_fk",
+          "tableFrom": "validaciones_conteo",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "usuario_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.ventas": {
+      "name": "ventas",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "conteo_id": {
+          "name": "conteo_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "precio_por_saco": {
+          "name": "precio_por_saco",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_venta": {
+          "name": "total_venta",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "confirmada": {
+          "name": "confirmada",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "creado_en": {
+          "name": "creado_en",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "ventas_conteo_id_conteos_id_fk": {
+          "name": "ventas_conteo_id_conteos_id_fk",
+          "tableFrom": "ventas",
+          "tableTo": "conteos",
+          "columnsFrom": [
+            "conteo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.ventas_lote": {
+      "name": "ventas_lote",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "conteo_id": {
+          "name": "conteo_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cantidad_sacos": {
+          "name": "cantidad_sacos",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "precio_unitario": {
+          "name": "precio_unitario",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "importe": {
+          "name": "importe",
+          "type": "numeric(12, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "comprador": {
+          "name": "comprador",
+          "type": "varchar(150)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "registrada_por": {
+          "name": "registrada_por",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "registrada_en": {
+          "name": "registrada_en",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "anulada_en": {
+          "name": "anulada_en",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "anulada_por": {
+          "name": "anulada_por",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "motivo_anulacion": {
+          "name": "motivo_anulacion",
+          "type": "varchar(300)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "clave_idempotencia": {
+          "name": "clave_idempotencia",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "ventas_lote_conteo_id_conteos_id_fk": {
+          "name": "ventas_lote_conteo_id_conteos_id_fk",
+          "tableFrom": "ventas_lote",
+          "tableTo": "conteos",
+          "columnsFrom": [
+            "conteo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "ventas_lote_registrada_por_usuarios_id_fk": {
+          "name": "ventas_lote_registrada_por_usuarios_id_fk",
+          "tableFrom": "ventas_lote",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "registrada_por"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "ventas_lote_anulada_por_usuarios_id_fk": {
+          "name": "ventas_lote_anulada_por_usuarios_id_fk",
+          "tableFrom": "ventas_lote",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "anulada_por"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "ventas_lote_clave_idempotencia_unique": {
+          "name": "ventas_lote_clave_idempotencia_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "clave_idempotencia"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

@@ -44,7 +44,7 @@ Los datos de prueba (`origen` que empieza por `prueba`) nunca se mezclan con los
 ## Arquitectura
 
 - **Next.js 15 (App Router) + React 19 + TypeScript**: páginas y API REST en el mismo proyecto.
-- **PostgreSQL** con **Drizzle ORM**: 8 tablas, 12 claves foráneas, restricciones CHECK y 14 triggers (stock, ventas históricas congeladas, evidencias sin borrado). Migraciones en `db/migrations` (0000–0007).
+- **PostgreSQL** con **Drizzle ORM**: 8 tablas, 12 claves foráneas, restricciones CHECK y 14 triggers (stock, ventas históricas congeladas, evidencias sin borrado). Migraciones en `db/migrations` (0000–0008).
 - **Módulo de visión (Python)** → `POST /api/conteo` con token, idempotente por `id_externo`.
 - **Roboflow Serverless** (RF-DETR) para Contar por foto y por video, solo desde el servidor.
 - **Twilio** (WhatsApp) mediante webhook firmado.
@@ -53,6 +53,7 @@ Los datos de prueba (`origen` que empieza por `prueba`) nunca se mezclan con los
 
 - Sesión **JWT HS256** (7 días) en cookie `HttpOnly`, `SameSite=Lax` y `Secure` (única excepción: la demostración local por HTTP en red privada, que exige una variable y una base de demostración); sin `JWT_SECRET` (≥ 32 caracteres) no se emiten ni aceptan sesiones.
 - Contraseñas con **bcrypt**; nunca en texto plano ni en las respuestas de la API.
+- **Límite de intentos**: tras 5 contraseñas incorrectas seguidas la cuenta se bloquea 15 minutos (HTTP 429 con `Retry-After`), ni siquiera la contraseña correcta entra; un inicio correcto o una contraseña nueva asignada por el administrador lo reinicia (`usuarios.intentos_fallidos`, `usuarios.bloqueado_hasta`, migración 0008).
 - Cada ruta de la API comprueba en la base que la cuenta siga **activa** y que la sesión no se haya revocado (`lib/sesion-servidor.ts`); el middleware solo verifica la firma del token. Una cuenta desactivada recibe 401 en la siguiente petición.
 - **Permisos por rol comprobados en el servidor** en cada ruta de la API (401 sin sesión, 403 sin permiso), no solo ocultando botones.
 - `POST /api/conteo` exige `VISION_API_TOKEN` (comparación en tiempo constante); sin token configurado responde 503.
@@ -117,7 +118,7 @@ Las pruebas de integración (API con base de datos, interfaz en Chrome, capturas
 
 ## Estado del despliegue
 
-- Publicada en **Vercel** (rama `main`, https://conteo-sacos-web.vercel.app) con **Neon** (PostgreSQL 18) desde el 04/11/2026; la base de producción tiene aplicadas las migraciones 0000–0007. «Contar por video» se publicó el 05/11/2026.
+- Publicada en **Vercel** (rama `main`, https://conteo-sacos-web.vercel.app) con **Neon** (PostgreSQL 18) desde el 04/11/2026; la base de producción tiene aplicadas las migraciones 0000–0007 (la 0008 se aplica con `produccion/migrar_neon_0008.sh` antes de publicar el límite de intentos). «Contar por video» se publicó el 05/11/2026.
 - Desarrollo y demostración: servidor local con PostgreSQL en Docker y la base `conteo_sacos_demo` (scripts de `D:\RESPALDOS_MACROMEC\demo`).
 - Pendiente para operar en planta: cámara fija, apuntar el detector a la API publicada (`MACROMEC_API_URL` y `VISION_API_TOKEN` de producción) y el webhook de Twilio a la URL de Vercel.
 

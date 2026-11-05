@@ -125,6 +125,10 @@ export const usuarios = pgTable("usuarios", {
   activo: boolean("activo").notNull().default(true),
   // Sube al desactivar, cambiar el rol o cambiar la contraseña: invalida los JWT emitidos antes.
   sesionVersion: integer("sesion_version").notNull().default(0),
+  // Límite de intentos de inicio de sesión (migración 0008): tras 5 contraseñas incorrectas seguidas la cuenta
+  // queda bloqueada 15 minutos. Un inicio correcto o una contraseña nueva asignada por el administrador lo reinicia.
+  intentosFallidos: integer("intentos_fallidos").notNull().default(0),
+  bloqueadoHasta: timestamp("bloqueado_hasta"),
 });
 
 /**

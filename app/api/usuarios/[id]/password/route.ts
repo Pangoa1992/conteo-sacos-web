@@ -35,7 +35,7 @@ export async function POST(req: NextRequest, contexto: { params: Promise<{ id: s
 
     await db
       .update(usuarios)
-      .set({ passwordHash: await hashearPassword(parsed.data.password), sesionVersion: sql`${usuarios.sesionVersion} + 1` })
+      .set({ passwordHash: await hashearPassword(parsed.data.password), sesionVersion: sql`${usuarios.sesionVersion} + 1`, intentosFallidos: 0, bloqueadoHasta: null })
       .where(eq(usuarios.id, id));
     console.info(`[usuarios] Contraseña de la cuenta ${id} restablecida por el usuario ${usuario.id}.`);
     return NextResponse.json({ ok: true });
