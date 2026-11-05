@@ -64,8 +64,17 @@ export async function POST(req: NextRequest) {
     params[key] = value.toString();
   });
 
-  const url = process.env.TWILIO_WEBHOOK_URL || req.nextUrl.toString();
-  if (!twilio.validateRequest(authToken, firma, url, params)) {
+  // Twilio firma con la URL pública configurada en su consola. Se acepta la de TWILIO_WEBHOOK_URL y la que
+  // llegó en la petición (Vercel la entrega con el host público): un espacio o una barra de más en la variable
+  // ya no rompe la firma. Ambas son direcciones del propio servidor, así que no se debilita la verificación.
+  const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
+  const proto = req.headers.get("x-forwarded-proto") || req.nextUrl.protocol.replace(":", "");
+  const candidatas = [process.env.TWILIO_WEBHOOK_URL?.trim(), host ? `${proto}://${host}${req.nextUrl.pathname}` : null, req.nextUrl.toString()]
+    .filter((u): u is string => !!u);
+  if (!candidatas.some((u) => twilio.validateRequest(authToken, firma, u, params))) {
+    // Sin secretos ni números en el registro: solo la causa probable.
+    console.warn(`[whatsapp] Firma de Twilio inválida para ${[...new Set(candidatas)].join(" | ")}: ` +
+      "TWILIO_AUTH_TOKEN no corresponde a la cuenta de Twilio que envía el mensaje (Sandbox), o la URL configurada en Twilio es otra.");
     return new NextResponse("Firma inválida", { status: 403 });
   }
 
