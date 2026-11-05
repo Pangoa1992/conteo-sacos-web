@@ -117,8 +117,9 @@ Las pruebas de integración (API con base de datos, interfaz en Chrome, capturas
 
 ## Estado del despliegue
 
-- La versión descrita aquí funciona en **entorno local y de demostración** (rama `cierre/dashboard-macromec-fases-1-4`). Probado de punta a punta el 04/11/2026: detector con video real → `POST` de lote (HTTP 201) → lote pendiente de validación.
-- La publicación en Vercel (`main`) corresponde a una **versión anterior con datos simulados** y solo las migraciones 0000–0001; desplegar esta versión requiere aplicar las migraciones 0002–0006 en la base de producción y configurar las variables nuevas.
+- Publicada en **Vercel** (rama `main`, https://conteo-sacos-web.vercel.app) con **Neon** (PostgreSQL 18) desde el 04/11/2026; la base de producción tiene aplicadas las migraciones 0000–0007. «Contar por video» se publicó el 05/11/2026.
+- Desarrollo y demostración: servidor local con PostgreSQL en Docker y la base `conteo_sacos_demo` (scripts de `D:\RESPALDOS_MACROMEC\demo`).
+- Pendiente para operar en planta: cámara fija, apuntar el detector a la API publicada (`MACROMEC_API_URL` y `VISION_API_TOKEN` de producción) y el webhook de Twilio a la URL de Vercel.
 
 ## Limitaciones conocidas
 
