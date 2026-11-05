@@ -14,6 +14,7 @@ Proyecto de innovación SENATI. El módulo de visión (RF-DETR + DeepSORT) está
 | Reportes del contratista y discrepancias (\|diferencia\| > 1 saco) | registra | consulta |
 | Inventario de sacos conformes, ventas parciales, estado de WhatsApp | ✅ | — |
 | Contar sacos por foto (RF-DETR) y registrar el resultado como lote | ✅ | — |
+| Contar sacos en un video desde el panel (sin terminal) y registrar el resultado como lote | ✅ | — |
 | Exportación CSV (historial completo, inventario, reportes) | ✅ | ✅ (lo que puede ver) |
 | Usuarios: alta de cuentas, nombre y rol, contraseña nueva, desactivar / activar | ✅ | — |
 | Mi cuenta: cambiar la contraseña propia (pide la actual) | ✅ | ✅ |
@@ -33,12 +34,19 @@ Los datos de prueba (`origen` que empieza por `prueba`) nunca se mezclan con los
 2. `POST /api/contar-foto/registrar`: el navegador reenvía la misma foto con el comprobante y el tipo de dato (real → origen `foto`, prueba → `prueba_foto`). El servidor verifica firma, vigencia, usuario y huella, y en una sola transacción crea el lote **pendiente de validación** (fuente `foto_celular`) y guarda la foto como su **evidencia**. No vuelve a consultar el modelo.
 3. El total nunca lo envía el navegador. La misma foto no crea dos lotes (`id_externo = foto_` + huella): un reintento devuelve el lote existente; con otro tipo de dato, 409.
 
+### Contar por video → lote
+
+1. El video **no se sube**: el navegador lo abre localmente, toma un fotograma cada 1/6 s (como el detector: 1 de cada 5 a 30 fps; hasta 120 s por análisis = 721 consultas) y envía cada uno, reducido a 1280 px, a `POST /api/contar-video/fotograma`, con 3 en paralelo. El servidor detecta los sacos con el mismo RF-DETR y devuelve las cajas con una **firma** (HMAC derivado de `JWT_SECRET`) que las ata a la sesión de análisis, al número de fotograma, a la huella del fotograma y al usuario.
+2. `lib/conteo-video.ts` (código compartido) sigue cada saco y cuenta los que cruzan la línea en la dirección elegida, con las reglas del detector Python: inferencia cada 5 fotogramas, detecciones de al menos el 14 % del alto, confirmación tras 3 detecciones, cruce medido solo con cajas detectadas y conteo diferido del saco que cruza siendo tentativo. En lugar del descriptor de apariencia de DeepSORT estima el desplazamiento común de la toma (cámara o faja), con penalidad a los cambios bruscos, y empareja por IoU y cercanía. Además, un saco que vuelve a cruzar después de cruzar en sentido contrario no se cuenta de nuevo.
+3. `POST /api/contar-video/registrar` recibe las firmas, la línea y la dirección, un fotograma como evidencia y el tipo de dato (origen `video` o `prueba_video`, fuente `video_panel`). Verifica todas las firmas, que no falten fotogramas ni estén desordenados y que la evidencia sea uno de ellos, **vuelve a contar en el servidor** y crea el lote pendiente con su evidencia en una transacción. La misma sesión no crea dos lotes.
+4. Con las 73 detecciones reales grabadas del video de prueba (13 s), el seguimiento cuenta 9 sacos (inspección visual: unos 9; detector con DeepSORT: 8). Con el video real y Roboflow real (05/11/2026, 79 consultas, 15 s de análisis) el panel contó 8.
+
 ## Arquitectura
 
 - **Next.js 15 (App Router) + React 19 + TypeScript**: páginas y API REST en el mismo proyecto.
 - **PostgreSQL** con **Drizzle ORM**: 8 tablas, 12 claves foráneas, restricciones CHECK y 14 triggers (stock, ventas históricas congeladas, evidencias sin borrado). Migraciones en `db/migrations` (0000–0007).
 - **Módulo de visión (Python)** → `POST /api/conteo` con token, idempotente por `id_externo`.
-- **Roboflow Serverless** (RF-DETR) para Contar por foto, solo desde el servidor.
+- **Roboflow Serverless** (RF-DETR) para Contar por foto y por video, solo desde el servidor.
 - **Twilio** (WhatsApp) mediante webhook firmado.
 
 ## Seguridad
@@ -104,6 +112,7 @@ Las pruebas de integración (API con base de datos, interfaz en Chrome, capturas
 | `/api/reportes-contratista`, `/api/reportes-contratista/lotes` | Reportes del contratista |
 | `GET /api/inventario`, `/api/ventas`, `/api/ventas/:id/anular` | Inventario y ventas |
 | `GET/POST /api/contar-foto`, `POST /api/contar-foto/registrar` | Contar sacos por foto y registrar el lote |
+| `POST /api/contar-video/fotograma`, `POST /api/contar-video/registrar` | Contar sacos en un video y registrar el lote |
 | `POST /api/whatsapp/webhook`, `GET /api/whatsapp/estado` | WhatsApp |
 
 ## Estado del despliegue
@@ -117,4 +126,5 @@ Las pruebas de integración (API con base de datos, interfaz en Chrome, capturas
 - Exactitud del conteo por foto frente a un conteo manual a ciegas (10 fotos, todos los sacos visibles): 84,9 % por foto, error absoluto medio 3,1 sacos, con tendencia a contar de menos los sacos del fondo. Esas fotos se usaron en el entrenamiento, así que es un límite superior: falta repetir la prueba con fotos nuevas.
 - WhatsApp se probó con el Sandbox real de Twilio (04/11/2026, modo DEMO, firma verificada). WhatsApp puede enviar un identificador privado (`whatsapp:PE.…`) en lugar del teléfono: en ese caso se autoriza ese identificador en `WHATSAPP_NUMEROS_AUTORIZADOS`. El Sandbox exige reenviar `join <código>` cada 72 horas; para uso continuo hace falta un remitente de WhatsApp aprobado.
 - El modelo detecta una sola clase («Saco»); la calidad la clasifica una persona.
+- Contar por video consume una consulta al modelo por cada fotograma analizado (6 por segundo de video) y depende de que el navegador pueda decodificar el archivo (MP4 H.264 o WebM). Su seguimiento no usa descriptor de apariencia: en tomas con giros de cámara puede contar de más o de menos (en el video de prueba, un posible conteo falso durante el giro de regreso).
 - `/api/dev/seed-usuarios` es solo para desarrollo (deshabilitado en producción y sin `DEV_SEED_SECRET`).

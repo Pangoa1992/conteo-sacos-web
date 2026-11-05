@@ -7,6 +7,7 @@ import { InventarioModule } from "./InventarioModule";
 import { ContratistasModule } from "./ContratistasModule";
 import { EstadoWhatsapp } from "./EstadoWhatsapp";
 import { ConteoPorFoto } from "./ConteoPorFoto";
+import { ConteoPorVideo } from "./ConteoPorVideo";
 import { GraficoProduccion, etiquetaDia, type DiaProduccion } from "./GraficoProduccion";
 import { ProduccionValidada, type FilaValidacionDiaria } from "./ProduccionValidada";
 import { BadgeValidacion, ValidacionConteo } from "./ValidacionConteo";
@@ -308,7 +309,7 @@ export function Dashboard() {
     { id: "camaras", texto: "Cámaras" },
     { id: "historial", texto: "Historial" },
     { id: "contratistas", texto: "Contratistas" },
-    ...(esAdmin ? [{ id: "inventario", texto: "Inventario" }, { id: "ventas", texto: "Ventas" }, { id: "whatsapp", texto: "WhatsApp" }, { id: "foto", texto: "Contar por foto" }, { id: "usuarios", texto: "Usuarios" }] : []),
+    ...(esAdmin ? [{ id: "inventario", texto: "Inventario" }, { id: "ventas", texto: "Ventas" }, { id: "whatsapp", texto: "WhatsApp" }, { id: "foto", texto: "Contar por foto" }, { id: "video", texto: "Contar por video" }, { id: "usuarios", texto: "Usuarios" }] : []),
     ...(usuario ? [{ id: "cuenta", texto: "Mi cuenta" }] : []),
   ];
 
@@ -796,6 +797,10 @@ export function Dashboard() {
             {/* Contar por foto: muestra el resultado y, si el personal lo decide, lo registra como lote pendiente. */}
             <div hidden={oculto("foto")}>
             <ConteoPorFoto visible={!oculto("foto")} onRegistrado={cargar} />
+            </div>
+            {/* Contar por video: el navegador toma los fotogramas; el servidor detecta y, al registrar, vuelve a contar. */}
+            <div hidden={oculto("video")}>
+            <ConteoPorVideo visible={!oculto("video")} onRegistrado={cargar} />
             </div>
             {/* Usuarios: alta, rol, contraseña nueva y desactivar (solo personal de MACROMEC). Se monta al abrirlo. */}
             {!oculto("usuarios") && <UsuariosModule />}
