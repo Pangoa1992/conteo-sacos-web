@@ -1,42 +1,51 @@
 /**
  * Generación de los PDF en el navegador. Este módulo se carga solo al pulsar
  * «Exportar PDF» o «Comprobante» (import dinámico), así jsPDF no pesa en la
- * carga inicial del panel.
+ * carga inicial del panel. El diseño (colores, franjas, tarjetas) está en lib/pdf.ts.
  */
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import {
   AVISO_COMPROBANTE,
+  COLOR,
   ESTILO_TABLA,
   MARGEN,
   dibujarEncabezado,
+  dibujarEncabezadoContinuacion,
+  dibujarIndicadores,
   dibujarPies,
+  dibujarTituloSeccion,
   fechaHoraPdf,
   nombreArchivoPdf,
   numeroComprobante,
   solesPdf,
   textoPdf,
   type DatosComprobante,
+  type IndicadorPdf,
 } from "./pdf";
 
 /** Celda: texto, o una nota que ocupa todo el ancho de la fila (detalle de una venta anulada). */
 export type CeldaPdf = string | { content: string; colSpan: number };
 export type TablaPdf = { titulo?: string; columnas: string[]; filas: CeldaPdf[][]; alinearDerecha?: number[]; sinEncabezado?: boolean };
+export type OpcionesReporte = { esPrueba?: boolean; nota?: string; emitido?: Date; indicadores?: IndicadorPdf[] };
 
 const ultimaY = (doc: jsPDF, porDefecto: number) =>
   (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? porDefecto;
 
+/** Texto de un elemento del panel, con un espacio entre sus partes ("Aprobado" + "128 conf."). */
+function textoElemento(n: Element | null, quitar = ""): string {
+  if (!n) return "";
+  const copia = n.cloneNode(true) as HTMLElement;
+  if (quitar) copia.querySelectorAll(quitar).forEach((h) => h.remove());
+  copia.querySelectorAll("*").forEach((h) => { h.before(" "); h.after(" "); });
+  return textoPdf(copia.textContent);
+}
+
 /** Lee una tabla HTML del panel: encabezados, filas visibles y columnas numéricas. */
 export function leerTablaHtml(tabla: HTMLTableElement): TablaPdf {
-  const limpiar = (celda: Element) => {
-    const copia = celda.cloneNode(true) as HTMLElement;
-    // Botones, formularios y campos no forman parte del dato.
-    // La etiqueta "Prueba" de cada fila se omite: el encabezado del PDF ya dice DATOS DE PRUEBA.
-    copia.querySelectorAll("button, form, input, select, textarea, .badge-prueba, [data-pdf-omitir]").forEach((n) => n.remove());
-    // Un espacio tras cada elemento: "Aprobado" + "128 conf." no deben quedar pegados.
-    copia.querySelectorAll("*").forEach((n) => { n.before(" "); n.after(" "); });
-    return textoPdf(copia.textContent);
-  };
+  // Botones, formularios y campos no forman parte del dato. La etiqueta "Prueba" de cada
+  // fila se omite: el encabezado del PDF ya dice DATOS DE PRUEBA.
+  const limpiar = (celda: Element) => textoElemento(celda, "button, form, input, select, textarea, .badge-prueba, [data-pdf-omitir]");
   const encabezados = Array.from(tabla.querySelectorAll("thead th"));
   const sinEncabezado = encabezados.length === 0;
   // Tabla sin <thead> (leyenda de una barra de composición): las columnas salen de la primera fila.
@@ -57,32 +66,29 @@ export function leerTablaHtml(tabla: HTMLTableElement): TablaPdf {
   return { columnas, filas, alinearDerecha, sinEncabezado };
 }
 
-/** Indicadores (tarjetas .kpi) de la sección como tabla: indicador, valor y detalle. */
-function leerIndicadores(seccion: HTMLElement): TablaPdf | null {
-  const texto = (n: Element | null) => {
-    if (!n) return "";
-    const copia = n.cloneNode(true) as HTMLElement;
-    copia.querySelectorAll("*").forEach((h) => { h.before(" "); h.after(" "); });
-    return textoPdf(copia.textContent);
-  };
-  const filas = Array.from(seccion.querySelectorAll(".kpi")).map((k) => [
-    texto(k.querySelector(".kpi-label")), texto(k.querySelector(".kpi-valor")), texto(k.querySelector(".kpi-sub")),
-  ]);
-  return filas.length ? { titulo: "Indicadores", columnas: ["Indicador", "Valor", "Detalle"], filas, alinearDerecha: [1] } : null;
+/** Indicadores (tarjetas .kpi) de la sección: etiqueta, valor y detalle. */
+export function leerIndicadores(seccion: HTMLElement): IndicadorPdf[] {
+  return Array.from(seccion.querySelectorAll(".kpi")).map((k) => ({
+    etiqueta: textoElemento(k.querySelector(".kpi-label")),
+    valor: textoElemento(k.querySelector(".kpi-valor")),
+    detalle: textoElemento(k.querySelector(".kpi-sub")),
+    destacado: k.classList.contains("kpi-validada"),
+  }));
 }
 
 /**
- * Reporte PDF de un módulo: el título y la descripción de la tarjeta, y cada tabla
- * con su subtítulo (h3 anterior). Si hay filtros, la descripción los menciona.
+ * Reporte PDF de un módulo: el título y la descripción de la tarjeta, sus indicadores
+ * y cada tabla con su subtítulo (h3 anterior), tal como se ven con los filtros activos.
  */
-export function exportarSeccionPdf(seccion: HTMLElement, opciones: { titulo: string; archivo: string; esPrueba?: boolean; nota?: string }) {
-  const indicadores = leerIndicadores(seccion);
-  const tablas: TablaPdf[] = indicadores ? [indicadores] : [];
+export function exportarSeccionPdf(
+  seccion: HTMLElement,
+  opciones: { titulo: string; archivo: string; esPrueba?: boolean; nota?: string; indicadores?: IndicadorPdf[] }
+) {
+  const tablas: TablaPdf[] = [];
   seccion.querySelectorAll<HTMLTableElement>("table").forEach((tabla) => {
     if (tabla.closest("[data-pdf-omitir]")) return;
     const leida = leerTablaHtml(tabla);
     if (leida.columnas.length === 0) return;
-    // Subtítulo: el h3 (o summary) más cercano antes de la tabla dentro de la sección.
     let titulo: string | undefined;
     const contenedor = tabla.closest("details");
     if (contenedor) titulo = textoPdf(contenedor.querySelector("summary")?.textContent);
@@ -90,51 +96,59 @@ export function exportarSeccionPdf(seccion: HTMLElement, opciones: { titulo: str
       const previos = Array.from(seccion.querySelectorAll("h3")).filter(
         (h) => h.compareDocumentPosition(tabla) & Node.DOCUMENT_POSITION_FOLLOWING
       );
-      titulo = previos.length ? textoPdf(previos[previos.length - 1].textContent) : undefined;
+      // Sin el texto tenue de alcance («· mismo alcance que…»).
+      titulo = previos.length ? textoElemento(previos[previos.length - 1], ".tenue") : undefined;
     }
     tablas.push({ ...leida, titulo });
   });
   const subtitulo = textoPdf(seccion.querySelector(".tarjeta-sub")?.textContent);
-  const doc = generarReportePdf(opciones.titulo, subtitulo, tablas, opciones);
+  const indicadores = [...(opciones.indicadores ?? []), ...leerIndicadores(seccion)];
+  const doc = generarReportePdf(opciones.titulo, subtitulo, tablas, { ...opciones, indicadores });
   doc.save(nombreArchivoPdf(opciones.archivo));
 }
 
-/** Documento con encabezado, tablas y pies (separado para poder probarlo sin DOM). */
-export function generarReportePdf(
-  titulo: string,
-  subtitulo: string,
-  tablas: TablaPdf[],
-  opciones: { esPrueba?: boolean; nota?: string; emitido?: Date } = {}
-): jsPDF {
+/** Documento con encabezado, indicadores, tablas y pies (separado para poder probarlo sin DOM). */
+export function generarReportePdf(titulo: string, subtitulo: string, tablas: TablaPdf[], opciones: OpcionesReporte = {}): jsPDF {
   const horizontal = tablas.some((t) => t.columnas.length > 6);
   const doc = new jsPDF({ orientation: horizontal ? "landscape" : "portrait", unit: "mm", format: "a4" });
-  let y = dibujarEncabezado(doc, titulo, subtitulo, opciones.esPrueba);
-  if (tablas.length === 0) {
+  const emitido = opciones.emitido ?? new Date();
+  const altoPagina = doc.internal.pageSize.getHeight();
+  let y = dibujarEncabezado(doc, titulo, subtitulo, opciones.esPrueba, { tipo: "Reporte", emitido });
+  y = dibujarIndicadores(doc, opciones.indicadores ?? [], y + 1);
+
+  if (tablas.length === 0 && !(opciones.indicadores ?? []).length) {
     doc.setFontSize(10);
+    doc.setTextColor(...COLOR.texto2);
     doc.text("No hay datos para mostrar con los filtros actuales.", MARGEN, y + 4);
   }
   for (const t of tablas) {
-    if (t.titulo) {
-      if (y > doc.internal.pageSize.getHeight() - 40) {
-        doc.addPage();
-        y = 20;
-      }
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
-      doc.text(textoPdf(t.titulo), MARGEN, y + 2);
-      y += 5;
+    if (y > altoPagina - 45) {
+      doc.addPage();
+      y = 20;
     }
+    if (t.titulo) y = dibujarTituloSeccion(doc, t.titulo, y + 2);
     const derecha = Object.fromEntries((t.alinearDerecha ?? []).map((i) => [i, { halign: "right" as const }]));
     autoTable(doc, {
       ...ESTILO_TABLA,
       startY: y,
       head: t.sinEncabezado ? undefined : [t.columnas],
       body: t.filas.length ? t.filas : [[{ content: "Sin registros.", colSpan: t.columnas.length }]],
-      columnStyles: derecha,
+      columnStyles: { ...(t.sinEncabezado ? { 0: { fontStyle: "bold" as const } } : {}), ...derecha },
+      // Filas de detalle (nota de ancho completo): en cursiva y gris.
+      didParseCell: (d) => {
+        if (d.section === "body" && (d.cell.colSpan ?? 1) > 1) {
+          d.cell.styles.fontStyle = "italic";
+          d.cell.styles.textColor = COLOR.texto2;
+        }
+      },
+      // Franja delgada en las páginas que agrega la tabla.
+      didDrawPage: (d) => {
+        if (d.pageNumber > 1) dibujarEncabezadoContinuacion(doc, titulo);
+      },
     });
-    y = ultimaY(doc, y) + 9;
+    y = ultimaY(doc, y) + 8;
   }
-  dibujarPies(doc, opciones.emitido, opciones.nota);
+  dibujarPies(doc, emitido, opciones.nota);
   return doc;
 }
 
@@ -142,66 +156,112 @@ export function generarReportePdf(
 export function generarComprobanteVenta(venta: DatosComprobante, emitido = new Date()): jsPDF {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a5" });
   const ancho = doc.internal.pageSize.getWidth();
-  let y = dibujarEncabezado(doc, `Nota de venta ${numeroComprobante(venta.id)}`, AVISO_COMPROBANTE, venta.esPrueba);
+  const alto = doc.internal.pageSize.getHeight();
+  let y = dibujarEncabezado(doc, "Nota de venta", undefined, venta.esPrueba, { tipo: "Documento interno", emitido });
 
-  const filas: [string, string][] = [
-    ["Fecha de la venta", fechaHoraPdf(new Date(venta.registradaEn))],
+  // Recuadro con el número y la fecha, como un talonario.
+  const anchoCaja = 52;
+  doc.setDrawColor(...COLOR.naranja);
+  doc.setLineWidth(0.6);
+  doc.roundedRect(ancho - MARGEN - anchoCaja, y - 1, anchoCaja, 15, 1.5, 1.5, "S");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7);
+  doc.setTextColor(...COLOR.tenue);
+  doc.text("N.° DE NOTA", ancho - MARGEN - anchoCaja / 2, y + 3.5, { align: "center" });
+  doc.setFontSize(13);
+  doc.setTextColor(...COLOR.naranja);
+  doc.text(numeroComprobante(venta.id), ancho - MARGEN - anchoCaja / 2, y + 10.5, { align: "center" });
+
+  // Datos de la venta a la izquierda del recuadro.
+  const datos: [string, string][] = [
+    ["Fecha", fechaHoraPdf(new Date(venta.registradaEn))],
     ["Comprador", venta.comprador?.trim() || "Cliente varios"],
-    ["Lote de origen", `#${venta.conteoId} (conteo del ${fechaHoraPdf(new Date(venta.fechaConteo))})`],
-    ["Registrado por", venta.registradaPorNombre ?? "—"],
+    ["Lote", `#${venta.conteoId} · conteo del ${fechaHoraPdf(new Date(venta.fechaConteo))}`],
+    ["Atendió", venta.registradaPorNombre ?? "—"],
   ];
   autoTable(doc, {
     ...ESTILO_TABLA,
     theme: "plain",
-    startY: y,
-    body: filas.map(([k, v]) => [textoPdf(k), textoPdf(v)]),
-    columnStyles: { 0: { fontStyle: "bold", cellWidth: 38 } },
-    styles: { ...ESTILO_TABLA.styles, fontSize: 9 },
+    startY: y + 18,
+    body: datos.map(([k, v]) => [textoPdf(k).toUpperCase(), textoPdf(v)]),
+    columnStyles: { 0: { fontStyle: "bold", cellWidth: 24, textColor: COLOR.tenue, fontSize: 7 } },
+    styles: { ...ESTILO_TABLA.styles, fontSize: 9, cellPadding: { top: 1.4, bottom: 1.4, left: 0, right: 2 } },
   });
-  y = ultimaY(doc, y) + 5;
+  y = ultimaY(doc, y) + 6;
 
   autoTable(doc, {
     ...ESTILO_TABLA,
     startY: y,
-    head: [["Descripción", "Cantidad", "P. unitario", "Importe"]],
+    head: [["Descripción", "Cant.", "P. unitario", "Importe"]],
     body: [[
       `Sacos de zanahoria conformes (lote #${venta.conteoId})`,
       String(venta.cantidadSacos),
       solesPdf(venta.precioUnitario),
       solesPdf(venta.importe),
     ].map(textoPdf)],
-    foot: [["", "", "TOTAL", textoPdf(solesPdf(venta.importe))]],
-    footStyles: { fillColor: [255, 255, 255], textColor: 0, fontStyle: "bold", halign: "right" },
     columnStyles: { 1: { halign: "right" }, 2: { halign: "right" }, 3: { halign: "right" } },
-    styles: { ...ESTILO_TABLA.styles, fontSize: 9 },
+    styles: { ...ESTILO_TABLA.styles, fontSize: 8.5 },
   });
-  y = ultimaY(doc, y) + 8;
+  y = ultimaY(doc, y) + 4;
+
+  // Total destacado.
+  const anchoTotal = 60;
+  doc.setFillColor(...COLOR.marino);
+  doc.roundedRect(ancho - MARGEN - anchoTotal, y, anchoTotal, 11, 1.5, 1.5, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.text("TOTAL", ancho - MARGEN - anchoTotal + 4, y + 7);
+  doc.setFontSize(12);
+  doc.text(textoPdf(solesPdf(venta.importe)), ancho - MARGEN - 4, y + 7.4, { align: "right" });
+  y += 18;
 
   if (venta.anuladaEn) {
-    doc.setTextColor(200, 40, 40);
+    // Sello diagonal y explicación.
+    doc.saveGraphicsState();
+    doc.setGState(new (doc as unknown as { GState: new (o: object) => unknown }).GState({ opacity: 0.18 }) as never);
+    doc.setTextColor(...COLOR.critico);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
-    doc.text("VENTA ANULADA", MARGEN, y);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
+    doc.setFontSize(46);
+    doc.text("ANULADA", ancho / 2, alto / 2 + 10, { align: "center", angle: 30 });
+    doc.restoreGraphicsState();
+    doc.setFillColor(...COLOR.criticoFondo);
+    doc.setDrawColor(...COLOR.critico);
+    doc.setLineWidth(0.3);
     const motivo = doc.splitTextToSize(
       textoPdf(`Anulada el ${fechaHoraPdf(new Date(venta.anuladaEn))} · Motivo: ${venta.motivoAnulacion ?? "—"}`),
-      ancho - 2 * MARGEN
+      ancho - 2 * MARGEN - 8
     ) as string[];
-    doc.text(motivo, MARGEN, y + 5);
-    y += 5 + motivo.length * 4 + 4;
-    doc.setTextColor(0, 0, 0);
+    const h = 9 + motivo.length * 3.8;
+    doc.roundedRect(MARGEN, y, ancho - 2 * MARGEN, h, 1.5, 1.5, "FD");
+    doc.setTextColor(...COLOR.critico);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.text("VENTA ANULADA", MARGEN + 4, y + 5.5);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.text(motivo, MARGEN + 4, y + 10);
+    y += h + 6;
   }
 
   // Firmas.
-  const alto = doc.internal.pageSize.getHeight();
-  const yFirma = Math.max(y + 18, alto - 34);
-  doc.setDrawColor(120, 120, 120);
+  const yFirma = Math.max(y + 16, alto - 42);
+  doc.setDrawColor(...COLOR.tenue);
+  doc.setLineWidth(0.3);
   doc.line(MARGEN + 4, yFirma, ancho / 2 - 6, yFirma);
   doc.line(ancho / 2 + 6, yFirma, ancho - MARGEN - 4, yFirma);
-  doc.setFontSize(8);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(...COLOR.texto2);
   doc.text("Entregué conforme (MACROMEC)", (MARGEN + 4 + ancho / 2 - 6) / 2, yFirma + 4, { align: "center" });
   doc.text("Recibí conforme (comprador)", (ancho / 2 + 6 + ancho - MARGEN - 4) / 2, yFirma + 4, { align: "center" });
+
+  // Aviso tributario al pie, en una banda gris.
+  doc.setFillColor(...COLOR.superficie2);
+  doc.rect(MARGEN, alto - 27, ancho - 2 * MARGEN, 10, "F");
+  doc.setFontSize(7);
+  doc.setTextColor(...COLOR.texto2);
+  doc.text(doc.splitTextToSize(textoPdf(AVISO_COMPROBANTE), ancho - 2 * MARGEN - 6) as string[], ancho / 2, alto - 23, { align: "center" });
 
   dibujarPies(doc, emitido, numeroComprobante(venta.id));
   return doc;
@@ -210,3 +270,4 @@ export function generarComprobanteVenta(venta: DatosComprobante, emitido = new D
 export function descargarComprobanteVenta(venta: DatosComprobante) {
   generarComprobanteVenta(venta).save(`${numeroComprobante(venta.id)}.pdf`);
 }
+

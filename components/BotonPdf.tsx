@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { IndicadorPdf } from "@/lib/pdf";
 
 type Props = {
   /** id de la sección (tarjeta) cuyas tablas se exportan. */
@@ -12,13 +13,15 @@ type Props = {
   deshabilitado?: boolean;
   /** Antes de leer las tablas (p. ej. mostrar todas las filas); se espera a que React pinte. */
   preparar?: () => void;
+  /** Indicadores para las tarjetas del PDF cuando la sección no los muestra como .kpi. */
+  indicadores?: () => IndicadorPdf[];
 };
 
 /**
  * «Exportar PDF»: genera en el navegador un reporte con las tablas que se ven en
  * la sección (con los filtros aplicados), con encabezado MACROMEC y numeración.
  */
-export function BotonPdf({ seccionId, titulo, archivo, esPrueba, deshabilitado, preparar }: Props) {
+export function BotonPdf({ seccionId, titulo, archivo, esPrueba, deshabilitado, preparar, indicadores }: Props) {
   const [generando, setGenerando] = useState(false);
   const [error, setError] = useState(false);
 
@@ -33,7 +36,7 @@ export function BotonPdf({ seccionId, titulo, archivo, esPrueba, deshabilitado, 
         await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
       }
       const { exportarSeccionPdf } = await import("@/lib/pdf-generar");
-      exportarSeccionPdf(seccion, { titulo, archivo, esPrueba });
+      exportarSeccionPdf(seccion, { titulo, archivo, esPrueba, indicadores: indicadores?.() });
     } catch {
       setError(true);
     } finally {

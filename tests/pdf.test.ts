@@ -58,7 +58,7 @@ describe("Comprobante de venta (nota de venta interna)", () => {
   it("una venta anulada lo indica con el motivo", () => {
     const pdf = contenido(generarComprobanteVenta({ ...venta, esPrueba: false, anuladaEn: "2026-11-14T16:00:00.000Z", motivoAnulacion: "Error de precio" }));
     expect(pdf).toContain("VENTA ANULADA");
-    expect(pdf).toContain("Error de precio");
+    expect(pdf).toContain("Motivo: Error de");
     expect(pdf).not.toContain("DATOS DE PRUEBA");
   });
 

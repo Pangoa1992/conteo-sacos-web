@@ -250,7 +250,13 @@ export function VentasModule({ incluir, esVistaPrueba, recarga, onCambio }: Prop
             Solo lotes aprobados · se puede vender una parte del lote y registrar varias ventas hasta agotarlo · el importe lo calcula el servidor
           </p>
         </div>
-        <BotonPdf seccionId="ventas" titulo="Ventas de sacos conformes" archivo="ventas" esPrueba={esVistaPrueba} preparar={() => setVerTodas(true)} />
+        <BotonPdf seccionId="ventas" titulo="Ventas de sacos conformes" archivo="ventas" esPrueba={esVistaPrueba} preparar={() => setVerTodas(true)}
+          indicadores={() => [
+            { etiqueta: "Ventas activas", valor: fmt(activas.length), detalle: `${fmt(ventasVista.length - activas.length)} anuladas (no restan stock)` },
+            { etiqueta: "Sacos vendidos", valor: sacos(sacosActivos), detalle: "ventas activas" },
+            { etiqueta: "Importe vendido", valor: soles(totalActivo), detalle: "calculado por el servidor", destacado: true },
+            { etiqueta: "Lotes con stock", valor: fmt(lotesVista.filter((l) => l.disponible > 0).length), detalle: `de ${fmt(lotesVista.length)} lotes aprobados` },
+          ]} />
       </div>
 
       {errorCarga && <p className="mensaje mensaje-error" role="alert">No se pudieron cargar las ventas. Se muestran los últimos datos recibidos.</p>}

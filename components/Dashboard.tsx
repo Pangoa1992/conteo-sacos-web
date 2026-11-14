@@ -620,7 +620,13 @@ export function Dashboard() {
               </p>
             </div>
             <div className="acciones-exportar">
-            <BotonPdf seccionId="historial" titulo="Historial de conteos" archivo="historial-conteos" deshabilitado={conteosVista.length === 0} />
+            <BotonPdf seccionId="historial" titulo="Historial de conteos" archivo="historial-conteos" deshabilitado={conteosVista.length === 0}
+              indicadores={() => [
+                { etiqueta: "Lotes", valor: fmt(conteosFiltrados.length), detalle: hayFiltrosActivos ? "con los filtros activos" : "todo el historial" },
+                { etiqueta: "Sacos detectados", valor: fmt(totalFiltrado), detalle: "conteo de la IA, sin modificar", destacado: true },
+                { etiqueta: "Promedio por lote", valor: conteosFiltrados.length ? fmt(Math.round(totalFiltrado / conteosFiltrados.length)) : "—", detalle: "sacos" },
+                { etiqueta: "Pendientes de validar", valor: fmt(pendientesVista), detalle: "lotes sin revisar" },
+              ]} />
             <button
               onClick={exportarCSV}
               className="btn-acento"
