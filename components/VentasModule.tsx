@@ -52,6 +52,8 @@ type Mensaje = { ok: boolean; texto: string } | null;
 
 // Ventas que se muestran antes de pulsar "Ver todas".
 const VENTAS_VISIBLES = 10;
+// Lotes del stock que se muestran antes de pulsar "Ver todos".
+const LOTES_VISIBLES = 12;
 // Reintentos automáticos (misma clave) cuando se pierde la conexión al registrar.
 const ESPERAS_REINTENTO_MS = [1000, 2000];
 
@@ -103,6 +105,7 @@ export function VentasModule({ incluir, esVistaPrueba, recarga, onCambio }: Prop
   const [procesandoAnulacion, setProcesandoAnulacion] = useState(false);
   const [mensajeAnulacion, setMensajeAnulacion] = useState<Mensaje>(null);
   const [verTodas, setVerTodas] = useState(false);
+  const [verTodoStock, setVerTodoStock] = useState(false);
 
   async function cargar() {
     try {
@@ -250,7 +253,7 @@ export function VentasModule({ incluir, esVistaPrueba, recarga, onCambio }: Prop
             Solo lotes aprobados · se puede vender una parte del lote y registrar varias ventas hasta agotarlo · el importe lo calcula el servidor
           </p>
         </div>
-        <BotonPdf seccionId="ventas" titulo="Ventas de sacos conformes" archivo="ventas" esPrueba={esVistaPrueba} preparar={() => setVerTodas(true)}
+        <BotonPdf seccionId="ventas" titulo="Ventas de sacos conformes" archivo="ventas" esPrueba={esVistaPrueba} preparar={() => { setVerTodas(true); setVerTodoStock(true); }}
           indicadores={() => [
             { etiqueta: "Ventas activas", valor: fmt(activas.length), detalle: `${fmt(ventasVista.length - activas.length)} anuladas (no restan stock)` },
             { etiqueta: "Sacos vendidos", valor: sacos(sacosActivos), detalle: "ventas activas" },
@@ -315,7 +318,7 @@ export function VentasModule({ incluir, esVistaPrueba, recarga, onCambio }: Prop
             </tr>
           </thead>
           <tbody>
-            {lotesVista.map((l) => (
+            {(verTodoStock ? lotesVista : lotesVista.slice(0, LOTES_VISIBLES)).map((l) => (
               <tr key={l.conteoId} className={l.esPrueba ? "fila-prueba" : ""}>
                 <td data-label="Lote">#{l.conteoId} {l.esPrueba && <EtiquetaPrueba />}</td>
                 <td data-label="Fecha">{fecha(l.fechaConteo)}</td>
@@ -330,6 +333,11 @@ export function VentasModule({ incluir, esVistaPrueba, recarga, onCambio }: Prop
           </tbody>
         </table>
       </div>
+      {lotesVista.length > LOTES_VISIBLES && (
+        <button type="button" className="btn-link btn-ver-todas" onClick={() => setVerTodoStock((v) => !v)} aria-expanded={verTodoStock}>
+          {verTodoStock ? `Mostrar solo los ${LOTES_VISIBLES} lotes más recientes` : `Ver todos los lotes (${lotesVista.length})`}
+        </button>
+      )}
 
       {/* ---- Ventas registradas ---- */}
       <h3 className="subtitulo">Ventas registradas</h3>

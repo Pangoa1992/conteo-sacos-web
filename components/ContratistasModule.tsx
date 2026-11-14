@@ -38,6 +38,8 @@ type Props = {
 };
 
 const fmt = (n: number) => n.toLocaleString("es-PE");
+// Reportes del historial que se muestran antes de pulsar "Ver todos" (el CSV y el PDF incluyen todos).
+const REPORTES_VISIBLES = 15;
 const fecha = (iso: string) => new Date(iso).toLocaleString("es-PE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 const fechaCorta = (d: string) => d.split("-").reverse().join("/");
 const ALCANCE_TIPO: Record<TipoDato, string> = { real: "solo datos reales", prueba: "solo datos de prueba", todos: "datos reales y de prueba" };
@@ -77,6 +79,7 @@ export function ContratistasModule({ esAdmin, vista, lotes, recarga, onRegistrad
   const [datos, setDatos] = useState<Datos | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
+  const [verTodos, setVerTodos] = useState(false);
   const ultimaConsulta = useRef(0);
 
   useEffect(() => {
@@ -121,7 +124,7 @@ export function ContratistasModule({ esAdmin, vista, lotes, recarga, onRegistrad
             discrepancia si supera ±{umbral} saco{umbral === 1 ? "" : "s"} · por fecha original del conteo (hora de Lima)
           </p>
         </div>
-        <BotonPdf seccionId="contratistas" titulo="Contratistas y reportes" archivo="contratistas" esPrueba={esVistaPrueba} />
+        <BotonPdf seccionId="contratistas" titulo="Contratistas y reportes" archivo="contratistas" esPrueba={esVistaPrueba} preparar={() => setVerTodos(true)} />
       </div>
 
       {esAdmin ? (
@@ -312,7 +315,7 @@ export function ContratistasModule({ esAdmin, vista, lotes, recarga, onRegistrad
             </tr>
           </thead>
           <tbody>
-            {(datos?.reportes ?? []).map((x) => (
+            {(verTodos ? datos?.reportes ?? [] : (datos?.reportes ?? []).slice(0, REPORTES_VISIBLES)).map((x) => (
               <tr key={x.id} className={`${x.esPrueba ? "fila-prueba" : ""} ${x.vigente ? "" : "fila-reemplazada"} ${x.vigente && x.discrepancia ? "fila-discrepancia" : ""}`}>
                 <td data-label="Registrado">{fecha(x.registradoEn)}</td>
                 <td data-label="Lote">
@@ -356,6 +359,11 @@ export function ContratistasModule({ esAdmin, vista, lotes, recarga, onRegistrad
           </tbody>
         </table>
       </div>
+      {(datos?.reportes.length ?? 0) > REPORTES_VISIBLES && (
+        <button type="button" className="btn-link btn-ver-todas" onClick={() => setVerTodos((v) => !v)} aria-expanded={verTodos}>
+          {verTodos ? `Mostrar solo los ${REPORTES_VISIBLES} más recientes` : `Ver todos los reportes (${datos!.reportes.length})`}
+        </button>
+      )}
     </section>
   );
 }

@@ -34,6 +34,8 @@ type Props = {
 };
 
 const fmt = (n: number) => n.toLocaleString("es-PE");
+// Lotes de la tabla que se muestran antes de pulsar "Ver todos" (el CSV y el PDF incluyen todos).
+const LOTES_VISIBLES = 12;
 const soles = (v: string) => `S/ ${Number(v).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fecha = (iso: string) => new Date(iso).toLocaleString("es-PE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 const lotes = (n: number) => `${fmt(n)} lote${n === 1 ? "" : "s"}`;
@@ -65,6 +67,7 @@ export function InventarioModule({ vista, recarga }: Props) {
   const [datos, setDatos] = useState<Datos | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
+  const [verTodos, setVerTodos] = useState(false);
   // Solo se aplica la respuesta de la última consulta (al cambiar filtros rápido
   // o recargar tras una venta, una respuesta vieja no pisa a la nueva).
   const ultimaConsulta = useRef(0);
@@ -117,7 +120,7 @@ export function InventarioModule({ vista, recarga }: Props) {
           </p>
         </div>
         <div className="acciones-exportar">
-        <BotonPdf seccionId="inventario" titulo="Inventario de sacos" archivo="inventario" esPrueba={esVistaPrueba} deshabilitado={sinLotes} />
+        <BotonPdf seccionId="inventario" titulo="Inventario de sacos" archivo="inventario" esPrueba={esVistaPrueba} deshabilitado={sinLotes} preparar={() => setVerTodos(true)} />
         <a
           className={`btn-acento ${csvDeshabilitado ? "deshabilitado" : ""}`}
           href={`/api/inventario?${consulta}&formato=csv`}
@@ -288,7 +291,7 @@ export function InventarioModule({ vista, recarga }: Props) {
             </tr>
           </thead>
           <tbody>
-            {(datos?.lotes ?? []).map((l) => (
+            {(verTodos ? datos?.lotes ?? [] : (datos?.lotes ?? []).slice(0, LOTES_VISIBLES)).map((l) => (
               <tr key={l.conteoId} className={l.esPrueba ? "fila-prueba" : ""}>
                 <td data-label="Lote">#{l.conteoId} {l.esPrueba && <EtiquetaPrueba />}</td>
                 <td data-label="Fecha">{fecha(l.fechaConteo)}</td>
@@ -314,6 +317,11 @@ export function InventarioModule({ vista, recarga }: Props) {
           </tbody>
         </table>
       </div>
+      {(datos?.lotes.length ?? 0) > LOTES_VISIBLES && (
+        <button type="button" className="btn-link btn-ver-todas" onClick={() => setVerTodos((v) => !v)} aria-expanded={verTodos}>
+          {verTodos ? `Mostrar solo los ${LOTES_VISIBLES} lotes más recientes` : `Ver todos los lotes de la tabla (${datos!.lotes.length})`}
+        </button>
+      )}
 
       {/* ---- Lotes en revisión ---- */}
       {datos && datos.enRevision.length > 0 && (
