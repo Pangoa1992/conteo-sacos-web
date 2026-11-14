@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { BotonPdf } from "@/components/BotonPdf";
 import { LONGITUD_MAXIMA_COMPRADOR, LONGITUD_MAXIMA_MOTIVO_ANULACION, calcularImporte, nuevaClaveIdempotencia, precioEnCentimos } from "@/lib/ventas";
 
 type Venta = {
@@ -201,6 +202,17 @@ export function VentasModule({ incluir, esVistaPrueba, recarga, onCambio }: Prop
     }
   }
 
+  const [errorComprobante, setErrorComprobante] = useState(false);
+  async function comprobante(venta: Venta) {
+    setErrorComprobante(false);
+    try {
+      const { descargarComprobanteVenta } = await import("@/lib/pdf-generar");
+      descargarComprobanteVenta(venta);
+    } catch {
+      setErrorComprobante(true);
+    }
+  }
+
   async function anular(e: React.FormEvent, venta: Venta) {
     e.preventDefault();
     if (!motivo.trim()) return setMensajeAnulacion({ ok: false, texto: "Indique el motivo de la anulación." });
@@ -238,6 +250,7 @@ export function VentasModule({ incluir, esVistaPrueba, recarga, onCambio }: Prop
             Solo lotes aprobados · se puede vender una parte del lote y registrar varias ventas hasta agotarlo · el importe lo calcula el servidor
           </p>
         </div>
+        <BotonPdf seccionId="ventas" titulo="Ventas de sacos conformes" archivo="ventas" esPrueba={esVistaPrueba} preparar={() => setVerTodas(true)} />
       </div>
 
       {errorCarga && <p className="mensaje mensaje-error" role="alert">No se pudieron cargar las ventas. Se muestran los últimos datos recibidos.</p>}
@@ -318,6 +331,7 @@ export function VentasModule({ incluir, esVistaPrueba, recarga, onCambio }: Prop
         {ventasVista.length} venta{ventasVista.length === 1 ? "" : "s"} · activas: {sacos(sacosActivos)} por {soles(totalActivo)} · las anuladas se conservan y no restan del stock
       </p>
       {mensajeAnulacion && <p className={`mensaje ${mensajeAnulacion.ok ? "mensaje-ok" : "mensaje-error"}`} role="status">{mensajeAnulacion.texto}</p>}
+      {errorComprobante && <p className="mensaje mensaje-error" role="alert">No se pudo generar el comprobante. Intente nuevamente.</p>}
       <div className="tabla-scroll">
         <table className="historial tabla-ventas">
           <thead>
@@ -345,10 +359,18 @@ export function VentasModule({ incluir, esVistaPrueba, recarga, onCambio }: Prop
                   <td data-label="Registró">{v.registradaPorNombre ?? "—"}</td>
                   <td data-label="Estado">
                     {v.anuladaEn ? (
-                      <span className="badge badge-critico">Anulada</span>
+                      <span className="venta-acciones">
+                        <span className="badge badge-critico">Anulada</span>
+                        <button type="button" className="btn-secundario btn-chico" onClick={() => comprobante(v)} title="Nota de venta interna en PDF (marcada como anulada)">
+                          Comprobante
+                        </button>
+                      </span>
                     ) : (
                       <span className="venta-acciones">
                         <span className="badge badge-ok">Activa</span>
+                        <button type="button" className="btn-secundario btn-chico" onClick={() => comprobante(v)} title="Nota de venta interna en PDF">
+                          Comprobante
+                        </button>
                         {anulando !== v.id && (
                           <button type="button" className="btn-secundario btn-peligro btn-chico" onClick={() => { setAnulando(v.id); setMotivo(""); setMensajeAnulacion(null); }}>
                             Anular

@@ -1,5 +1,6 @@
 "use client";
 
+import { BotonPdf } from "@/components/BotonPdf";
 import { useEffect, useRef, useState } from "react";
 import { ReporteContratistaModule, type LoteParaReporte } from "./ReporteContratistaModule";
 import { BadgeValidacion } from "./ValidacionConteo";
@@ -120,6 +121,7 @@ export function ContratistasModule({ esAdmin, vista, lotes, recarga, onRegistrad
             discrepancia si supera ±{umbral} saco{umbral === 1 ? "" : "s"} · por fecha original del conteo (hora de Lima)
           </p>
         </div>
+        <BotonPdf seccionId="contratistas" titulo="Contratistas y reportes" archivo="contratistas" esPrueba={esVistaPrueba} />
       </div>
 
       {esAdmin ? (

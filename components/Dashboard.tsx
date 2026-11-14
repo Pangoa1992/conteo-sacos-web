@@ -17,6 +17,7 @@ import { MiCuenta } from "./MiCuenta";
 import { ESTADOS_VALIDACION, ETIQUETA_ESTADO_VALIDACION, type EstadoValidacion } from "@/lib/conteos";
 import type { FilaValidacion } from "@/lib/produccion-validada";
 import { parametrosHistorial } from "@/lib/historial";
+import { BotonPdf } from "@/components/BotonPdf";
 
 export type Conteo = {
   id: number;
@@ -618,6 +619,8 @@ export function Dashboard() {
                 {pendientesVista > 0 && <> · {pendientesVista} pendiente{pendientesVista !== 1 ? "s" : ""} de validación</>}
               </p>
             </div>
+            <div className="acciones-exportar">
+            <BotonPdf seccionId="historial" titulo="Historial de conteos" archivo="historial-conteos" deshabilitado={conteosVista.length === 0} />
             <button
               onClick={exportarCSV}
               className="btn-acento"
@@ -626,6 +629,7 @@ export function Dashboard() {
             >
               {exportando ? "Exportando…" : "Exportar CSV"}
             </button>
+            </div>
           </div>
           {errorExportar && <p className="mensaje mensaje-error" role="alert">{errorExportar}</p>}
 

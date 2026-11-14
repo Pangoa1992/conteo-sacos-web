@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { BotonPdf } from "@/components/BotonPdf";
 import {
   ESTADOS_STOCK,
   ETIQUETA_ESTADO_STOCK,
@@ -115,6 +116,8 @@ export function InventarioModule({ vista, recarga }: Props) {
             Disponible = sacos conformes de lotes aprobados − ventas activas · calculado en la base de datos · por fecha original del conteo (hora de Lima)
           </p>
         </div>
+        <div className="acciones-exportar">
+        <BotonPdf seccionId="inventario" titulo="Inventario de sacos" archivo="inventario" esPrueba={esVistaPrueba} deshabilitado={sinLotes} />
         <a
           className={`btn-acento ${csvDeshabilitado ? "deshabilitado" : ""}`}
           href={`/api/inventario?${consulta}&formato=csv`}
@@ -125,6 +128,7 @@ export function InventarioModule({ vista, recarga }: Props) {
         >
           Exportar CSV{datos && !sinLotes ? ` (${fmt(datos.totalLotesTabla)})` : ""}
         </a>
+        </div>
       </div>
 
       <div className="filtros">

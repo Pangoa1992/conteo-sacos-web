@@ -1,5 +1,6 @@
 "use client";
 
+import { BotonPdf } from "@/components/BotonPdf";
 import { useMemo, useState } from "react";
 import { ETIQUETA_ESTADO_VALIDACION } from "@/lib/conteos";
 import { porcentaje, resumirValidacion, type FilaValidacion } from "@/lib/produccion-validada";
@@ -109,6 +110,8 @@ export function ProduccionValidada({ validacion, diarioPorEstado, hoy, incluir, 
             Lotes revisados por el personal · {def.dias === null ? "todo el historial" : def.dias === 1 ? "hoy" : `últimos ${def.dias} días`} · por fecha del conteo · {etiquetaVista.toLowerCase()}
           </p>
         </div>
+        <div className="acciones-exportar">
+        <BotonPdf seccionId="validada" titulo="Producción validada" archivo="produccion-validada" esPrueba={esVistaPrueba} />
         <div className="segmentado" role="radiogroup" aria-label="Periodo de producción validada">
           {PERIODOS.map((p) => (
             <button key={p.id} type="button" role="radio" aria-checked={periodo === p.id}
@@ -116,6 +119,7 @@ export function ProduccionValidada({ validacion, diarioPorEstado, hoy, incluir, 
               {p.texto}
             </button>
           ))}
+        </div>
         </div>
       </div>
 
