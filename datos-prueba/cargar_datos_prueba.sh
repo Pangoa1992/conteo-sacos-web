@@ -27,4 +27,6 @@ docker exec "$CONTENEDOR" pg_dump -U macromec -d "$BD" --no-owner > "$respaldo"
 echo "Respaldo previo: $respaldo"
 
 docker exec -i "$CONTENEDOR" psql -U macromec -d "$BD" -q -P pager=off < "$DIR/cargar_datos_prueba.sql"
+# Usuarios, lotes por foto y por video y evidencias (necesita las fotos de la prueba de exactitud).
+node "$DIR/cargar_complementos.cjs" "$BD" "${CARPETA_EXACTITUD:-D:/PROYECTO/PRUEBA_EXACTITUD}" "${CARPETA_DETECTOR:-D:/PROYECTO/contador-sacos}"
 echo "Datos de prueba cargados en $BD."
