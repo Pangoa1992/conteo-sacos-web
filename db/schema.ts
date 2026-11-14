@@ -164,3 +164,17 @@ export const evidenciasContenido = pgTable("evidencias_contenido", {
   imagen: bytea("imagen").notNull(),
   miniatura: bytea("miniatura").notNull(),
 });
+
+/**
+ * Registro de los respaldos descargados desde el panel (módulo «Respaldo»):
+ * quién lo descargó, cuándo, cuántos registros incluía y la huella SHA-256 del
+ * archivo ZIP. Solo se agrega; el archivo no se guarda en el servidor.
+ */
+export const respaldos = pgTable("respaldos", {
+  id: serial("id").primaryKey(),
+  usuarioId: integer("usuario_id").references(() => usuarios.id).notNull(),
+  creadoEn: timestamp("creado_en").notNull().defaultNow(),
+  registros: integer("registros").notNull(),
+  bytes: integer("bytes").notNull(),
+  sha256: char("sha256", { length: 64 }).notNull(),
+});

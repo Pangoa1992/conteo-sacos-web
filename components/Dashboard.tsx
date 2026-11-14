@@ -13,6 +13,7 @@ import { ProduccionValidada, type FilaValidacionDiaria } from "./ProduccionValid
 import { BadgeValidacion, ValidacionConteo } from "./ValidacionConteo";
 import { EvidenciasConteo } from "./EvidenciasConteo";
 import { UsuariosModule } from "./UsuariosModule";
+import { RespaldoModule } from "./RespaldoModule";
 import { MiCuenta } from "./MiCuenta";
 import { ESTADOS_VALIDACION, ETIQUETA_ESTADO_VALIDACION, type EstadoValidacion } from "@/lib/conteos";
 import type { FilaValidacion } from "@/lib/produccion-validada";
@@ -310,7 +311,7 @@ export function Dashboard() {
     { id: "camaras", texto: "Cámaras" },
     { id: "historial", texto: "Historial" },
     { id: "contratistas", texto: "Contratistas" },
-    ...(esAdmin ? [{ id: "inventario", texto: "Inventario" }, { id: "ventas", texto: "Ventas" }, { id: "whatsapp", texto: "WhatsApp" }, { id: "foto", texto: "Contar por foto" }, { id: "video", texto: "Contar por video" }, { id: "usuarios", texto: "Usuarios" }] : []),
+    ...(esAdmin ? [{ id: "inventario", texto: "Inventario" }, { id: "ventas", texto: "Ventas" }, { id: "whatsapp", texto: "WhatsApp" }, { id: "foto", texto: "Contar por foto" }, { id: "video", texto: "Contar por video" }, { id: "usuarios", texto: "Usuarios" }, { id: "respaldo", texto: "Respaldo" }] : []),
     ...(usuario ? [{ id: "cuenta", texto: "Mi cuenta" }] : []),
   ];
 
@@ -814,6 +815,8 @@ export function Dashboard() {
             </div>
             {/* Usuarios: alta, rol, contraseña nueva y desactivar (solo personal de MACROMEC). Se monta al abrirlo. */}
             {!oculto("usuarios") && <UsuariosModule />}
+            {/* Respaldo: descarga de todos los datos en un ZIP (solo lectura). Se monta al abrirlo. */}
+            {!oculto("respaldo") && <RespaldoModule />}
           </>
         )}
 

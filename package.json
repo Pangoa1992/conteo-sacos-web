@@ -17,6 +17,7 @@
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "drizzle-orm": "0.45.4",
+    "fflate": "0.8.2",
     "jose": "^5.9.0",
     "jspdf": "4.2.1",
     "jspdf-autotable": "5.0.9",

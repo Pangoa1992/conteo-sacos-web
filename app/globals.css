@@ -1135,3 +1135,7 @@ a.btn-acento.deshabilitado { opacity: 0.5; cursor: default; pointer-events: none
 .acciones-exportar { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; justify-content: flex-end; }
 .boton-pdf { display: inline-flex; align-items: center; gap: 0.4rem; }
 .mensaje-error-inline { color: var(--critico, #c62828); font-size: 0.85rem; }
+
+/* Módulo Respaldo */
+.kpi-valor-texto { font-size: 1.35rem; }
+.respaldo-nota { margin-top: 1rem; }
