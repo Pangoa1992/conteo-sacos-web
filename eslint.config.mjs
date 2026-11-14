@@ -19,6 +19,11 @@ const eslintConfig = [
       "@next/next/no-img-element": "off",
     },
   },
+  {
+    // Scripts de Node (CommonJS) para cargar datos de prueba: usan require a propósito.
+    files: ["datos-prueba/**/*.cjs"],
+    rules: { "@typescript-eslint/no-require-imports": "off" },
+  },
 ];
 
 export default eslintConfig;
