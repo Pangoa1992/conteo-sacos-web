@@ -38,12 +38,12 @@ Nuevas en esta entrega: `tests/whatsapp-foto.test.ts` (14) y `tests/pdf.test.ts`
 | P-19 | Datos de prueba | Carga en base de ensayo | `cargar_datos_prueba.sh conteo_sacos_mejoras` | 78 lotes, 62 reportes, 43 ventas (2 anuladas), con respaldo previo | Correcto |
 | P-20 | Datos de prueba | Segunda carga | Ejecutarlo otra vez en la misma base | Se niega: los datos ya están cargados | Correcto |
 | P-21 | Datos de prueba | Protección de la base real | `cargar_datos_prueba.sh conteo_sacos` | Se niega: la base no está marcada como de prueba | Correcto |
+| P-22 | WhatsApp | Foto real en producción | Foto de sacos desde el celular autorizado al sistema publicado (Vercel, Twilio y Roboflow reales), 14/11/2026 | El bot responde la cantidad de sacos de la foto | Correcto: contó 9 de 9 sacos (conteo manual del usuario), confianza promedio 86.8 % |
 
-## 3. Pendiente (necesita al usuario)
+## 3. Notas
 
-- **Foto real por WhatsApp (P-02 con servicios reales):** iniciar el túnel con
-  `iniciar_prueba_whatsapp.sh` (lo ejecuta el usuario), mandar una foto desde el
-  celular autorizado y anotar el conteo del bot frente al conteo manual. Cada foto
-  gasta una consulta de Roboflow.
 - Las pruebas P-02, P-05 y P-07 usan servicios simulados; P-06, P-08 y P-09 se hicieron
-  contra el servidor con mensajes firmados como Twilio.
+  contra el servidor local con mensajes firmados como Twilio; P-22 es la prueba real
+  de punta a punta en producción.
+- Una sola foto no mide la exactitud del modelo; la exactitud por foto medida con
+  conteo manual es la del informe de exactitud (84,9 %).
