@@ -13,8 +13,8 @@ que representan la operación real.
 
 | Tipo de prueba | Qué comprueba | Casos | Resultado |
 |---|---|---|---|
-| Unitarias (Vitest) | Reglas de negocio sin servidor: ventas, inventario, validación, usuarios, WhatsApp, PDF, foto, video | 122 | 122 pasan |
-| De sistema (caja negra) | Cada módulo a través de su API, contra el servidor compilado y una base de ensayo | 54 | 54 pasan |
+| Unitarias (Vitest) | Reglas de negocio sin servidor: ventas, inventario, validación, usuarios, WhatsApp, PDF, foto, video, respaldo | 127 | 127 pasan |
+| De sistema (caja negra) | Cada módulo a través de su API, contra el servidor compilado y una base de ensayo | 58 | 58 pasan |
 | De interfaz (Chrome) | Botones «Exportar PDF» de 5 módulos y comprobantes de venta, sin errores en la consola | 9 | 9 pasan |
 | Real en producción | Foto de sacos enviada por WhatsApp al sistema publicado (Twilio y Roboflow reales) | 1 | 9 de 9 sacos, confianza 86.8 % |
 
@@ -26,7 +26,7 @@ que representan la operación real.
   Las pruebas no escribieron en la base real ni en la demo.
 - Servicios externos: Twilio simulado con mensajes firmados con la clave real; Roboflow real en
   el caso de «Contar por foto» (1 consulta).
-- Evidencias de la ejecución: `D:\RESPALDOS_MACROMEC\herramientas_pruebas\sistema_completo\ejecucion_2026-11-14_132125`.
+- Evidencias de la ejecución: `D:\RESPALDOS_MACROMEC\herramientas_pruebas\sistema_completo\ejecucion_2026-11-14_134630`.
 
 ## 4. Casos de prueba del sistema
 
@@ -41,7 +41,7 @@ que representan la operación real.
 | PS-07 | Acceso | Permisos por rol | el cliente pide el inventario (solo personal MACROMEC) | 403 | 403 | Aprobado |
 | PS-08 | Acceso | Permisos por rol | el cliente pide la lista de usuarios | 403 | 403 | Aprobado |
 | PS-09 | Acceso | Sesión vigente | GET /api/auth/me con la cookie | Devuelve el usuario y su rol | 200 | Aprobado |
-| PS-10 | Conteos | Registro de un lote desde el detector | POST /api/conteo con token y 37 sacos | 201 y lote pendiente de validación | 201 lote #104 | Aprobado |
+| PS-10 | Conteos | Registro de un lote desde el detector | POST /api/conteo con token y 37 sacos | 201 y lote pendiente de validación | 201 lote #107 | Aprobado |
 | PS-11 | Conteos | Reintento del mismo lote (idempotencia) | mismo idExterno y mismos datos | 200 «duplicado», sin crear otro lote | 200 | Aprobado |
 | PS-12 | Conteos | Mismo idExterno con otros datos | idExterno repetido y 40 sacos | 409 conflicto | 409 | Aprobado |
 | PS-13 | Conteos | Registro sin token | POST /api/conteo sin Authorization | 401 | 401 | Aprobado |
@@ -63,7 +63,7 @@ que representan la operación real.
 | PS-29 | Inventario | Filtro de fecha inválido | desde=2026-13-45 | 400 | 400 | Aprobado |
 | PS-30 | Ventas | Registrar una venta parcial | 20 de 34 conformes a S/ 27.50 | 201 e importe S/ 550.00 calculado por el servidor | 201 importe 550.00 | Aprobado |
 | PS-31 | Ventas | Doble clic (misma clave) | misma claveIdempotencia | No crea otra venta | 200 duplicado=true | Aprobado |
-| PS-32 | Ventas | Vender más de lo disponible | 15 sacos cuando quedan 14 | Rechazada por stock insuficiente | 409 Stock insuficiente: el lote #104 tiene 14 sacos conformes disponibles. | Aprobado |
+| PS-32 | Ventas | Vender más de lo disponible | 15 sacos cuando quedan 14 | Rechazada por stock insuficiente | 409 Stock insuficiente: el lote #107 tiene 14 sacos conformes disponibles. | Aprobado |
 | PS-33 | Ventas | Vender de un lote no aprobado | lote #9 pendiente | Rechazada | 409 Solo se venden sacos conformes de lotes aprobados. | Aprobado |
 | PS-34 | Ventas | Precio con 3 decimales | S/ 10.555 | 400 | 400 | Aprobado |
 | PS-35 | Ventas | Anular una venta | motivo escrito | 200 y los 20 sacos vuelven al stock (34 disponibles) | 200 disponibles 34 | Aprobado |
@@ -84,8 +84,12 @@ que representan la operación real.
 | PS-50 | Contar por foto | Disponibilidad del servicio | GET /api/contar-foto | Disponible con el modelo RF-DETR | 200 willy-urzch/carrot-sack-counter-1-rfdetr-small-t1 | Aprobado |
 | PS-51 | Contar por foto | Permiso del cliente | el cliente consulta el servicio | 403 | 403 | Aprobado |
 | PS-52 | Contar por foto | Contar una foto real (Roboflow real) | WhatsApp Image 2026-09-09 at 12.14.02 PM.jpeg (conteo manual: 13) | Devuelve el total de sacos y la confianza | 200 total 13 · confianza 88.16 % | Aprobado |
-| PS-53 | Panel | Resumen del panel | GET /api/conteo/resumen | 200 | 200 | Aprobado |
-| PS-54 | Panel | Estado de WhatsApp en el panel | GET /api/whatsapp/estado | 200 sin revelar secretos | 200 | Aprobado |
+| PS-53 | Respaldo | Permiso del cliente | el cliente intenta descargar el respaldo | 403 | 403 | Aprobado |
+| PS-54 | Respaldo | Descargar respaldo | botón «Descargar respaldo» (administrador) | ZIP con un CSV por tabla, manifiesto y huella SHA-256 | 200 · 14613 bytes · 359 registros | Aprobado |
+| PS-55 | Respaldo | Registro de la descarga | consultar el módulo después de descargar | La última descarga figura con el usuario y la fecha | última: Admin MACROMEC (dev) | Aprobado |
+| PS-56 | Respaldo | Sin contraseñas en el respaldo | contenido de usuarios.csv dentro del ZIP | No incluye contraseñas ni su hash | columnas: id,nombre,correo,rol,activo,creado_en | Aprobado |
+| PS-57 | Panel | Resumen del panel | GET /api/conteo/resumen | 200 | 200 | Aprobado |
+| PS-58 | Panel | Estado de WhatsApp en el panel | GET /api/whatsapp/estado | 200 sin revelar secretos | 200 | Aprobado |
 
 ## 5. Resumen por módulo
 
@@ -101,8 +105,9 @@ que representan la operación real.
 | Usuarios | 5 | 5 |
 | WhatsApp | 6 | 6 |
 | Contar por foto | 3 | 3 |
+| Respaldo | 4 | 4 |
 | Panel | 2 | 2 |
-| **Total** | **54** | **54** |
+| **Total** | **58** | **58** |
 | Interfaz: reportes PDF y comprobantes | 9 | 9 |
 
 ## 6. Incidencias
@@ -111,15 +116,15 @@ que representan la operación real.
 - En la primera ejecución, 2 casos (PS-26 y PS-42) salieron fallidos por errores del script de
   prueba, no del sistema: la base de datos sí rechazó el borrado de la evidencia y la cuenta
   desactivada sí perdió su sesión (`/api/auth/me` responde `usuario: null`). Se corrigió el
-  script y la segunda ejecución aprobó los 54 casos.
+  script y la segunda ejecución aprobó los 58 casos.
 
 ## 7. Conclusión
 
-Los 54 casos de sistema, las 122 pruebas unitarias, las 9 pruebas de interfaz y la prueba
+Los 58 casos de sistema, las 127 pruebas unitarias, las 9 pruebas de interfaz y la prueba
 real por WhatsApp resultaron aprobados. El sistema valida los datos de entrada, respeta los
 permisos por rol, impide duplicados (conteos y ventas), conserva el historial (evidencias y
 ventas anuladas no se borran) y mantiene coherente el inventario (disponible = conformes −
-vendidos).
+vendidos) y permite descargar un respaldo completo sin contraseñas.
 
 La exactitud del modelo de visión se mide aparte, con conteo manual: 84,9 % por foto
 (informe de exactitud). En esta ejecución, la foto real de prueba dio 13 sacos frente a 13 del
