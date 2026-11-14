@@ -91,4 +91,4 @@ export const TEXTO_FOTO_NO_CONFIGURADO =
   "El conteo por foto no está disponible en este momento. Comuníquese con el personal de MACROMEC.";
 
 export const TEXTO_FOTO_ERROR =
-  "No se pudo contar la foto en este momento (el servicio de detección no respondió a tiempo). Intente nuevamente en unos minutos.";
+  "No se pudo contar la foto en este momento. Intente nuevamente en unos minutos.";
