@@ -46,7 +46,7 @@ export function BotonPdf({ seccionId, titulo, archivo, esPrueba, deshabilitado, 
 
   return (
     <span className="boton-pdf" data-pdf-omitir>
-      <button type="button" className="btn-secundario" onClick={exportar} disabled={generando || deshabilitado}>
+      <button type="button" className="btn-pdf" onClick={exportar} disabled={generando || deshabilitado}>
         {generando ? "Generando PDF…" : "Exportar PDF"}
       </button>
       {error && <span className="mensaje-error-inline" role="alert"> No se pudo generar el PDF.</span>}

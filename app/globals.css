@@ -616,15 +616,31 @@ button, input { font-family: inherit; }
 .btn-acento:disabled, .btn-carrot:disabled { opacity: 0.5; cursor: default; }
 
 .btn-secundario {
-  background: transparent;
-  border: 1px solid var(--linea);
-  color: var(--texto-2);
+  background: var(--superficie);
+  border: 1.5px solid var(--texto-tenue);
+  color: var(--texto);
   border-radius: 6px;
   padding: 0.45rem 0.85rem;
   font-size: 0.84rem;
+  font-weight: 600;
   cursor: pointer;
 }
-.btn-secundario:hover { border-color: var(--texto-tenue); color: var(--texto); }
+.btn-secundario:hover { border-color: var(--texto); background: var(--superficie-2); }
+.btn-secundario:disabled { opacity: 0.5; cursor: default; }
+
+/* Exportar PDF: azul de marca, para distinguirlo del CSV (naranja). */
+.btn-pdf {
+  background: #1450b4;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.55rem 1.1rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-pdf:hover { background: #0f3f8f; }
+.btn-pdf:disabled { opacity: 0.5; cursor: default; }
 
 /* ---------- Badges ---------- */
 
