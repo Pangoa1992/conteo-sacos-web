@@ -53,7 +53,12 @@ const limitar = (n: number, max: number) => Math.min(Math.max(n, 0), max);
  * api_key_transport="header": cuerpo en base64, clave en «Authorization: Bearer»
  * (nunca en la URL) y sin reducir la imagen, así las cajas vuelven en sus píxeles.
  */
-export async function detectarSacos(imagen: Buffer, ancho: number, alto: number): Promise<ResultadoConteoFoto> {
+export async function detectarSacos(
+  imagen: Buffer,
+  ancho: number,
+  alto: number,
+  tiempoMaximoMs = TIEMPO_MAXIMO_MS
+): Promise<ResultadoConteoFoto> {
   const clave = claveRoboflow();
   const base = urlRoboflow();
   if (!clave || !base) {
@@ -68,7 +73,7 @@ export async function detectarSacos(imagen: Buffer, ancho: number, alto: number)
       body: imagen.toString("base64"),
       cache: "no-store",
       redirect: "error",
-      signal: AbortSignal.timeout(TIEMPO_MAXIMO_MS),
+      signal: AbortSignal.timeout(tiempoMaximoMs),
     });
   } catch {
     throw new DeteccionNoDisponible("No se pudo conectar con el servicio de detección (sin internet o sin respuesta). Intente nuevamente.", 503);

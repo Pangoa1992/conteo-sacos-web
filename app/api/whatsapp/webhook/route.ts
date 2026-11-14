@@ -3,6 +3,8 @@ import { mensajeErrorBD } from "@/lib/errores-bd";
 import twilio from "twilio";
 import { responderComando } from "@/lib/consultas-whatsapp";
 import { modoDemoWhatsappActivo } from "@/lib/modo-demo-whatsapp-servidor";
+import { contarFotoWhatsapp } from "@/lib/whatsapp-foto-servidor";
+import { TEXTO_FOTO_NO_IMAGEN, leerAdjuntos } from "@/lib/whatsapp-foto";
 import {
   TEXTO_AYUDA,
   TEXTO_ERROR,
@@ -37,6 +39,10 @@ import {
  *
  * Comandos (sin importar mayúsculas ni tildes): ayuda, último, hoy, semana,
  * discrepancias, lote 123. Ver lib/whatsapp.ts y lib/consultas-whatsapp.ts.
+ *
+ * Foto: si el mensaje trae una imagen, se cuentan los sacos con el mismo modelo de
+ * «Contar por foto» y se responde el total (lib/whatsapp-foto-servidor.ts). Mismas
+ * reglas de firma y números autorizados; la foto no se guarda ni crea lotes.
  *
  * TWILIO_WEBHOOK_URL (opcional): URL pública exacta configurada en la
  * consola de Twilio. Usarla cuando la app corre detrás de un proxy
@@ -78,7 +84,7 @@ export async function POST(req: NextRequest) {
     return new NextResponse("Firma inválida", { status: 403 });
   }
 
-  const respuesta = await construirRespuesta(params["From"], params["Body"] || "");
+  const respuesta = await construirRespuesta(params, authToken);
   const twiml = new twilio.twiml.MessagingResponse();
   twiml.message(limitarRespuesta(respuesta));
 
@@ -87,7 +93,9 @@ export async function POST(req: NextRequest) {
   });
 }
 
-async function construirRespuesta(remitente: string | undefined, mensaje: string): Promise<string> {
+async function construirRespuesta(params: Record<string, string>, authToken: string): Promise<string> {
+  const remitente = params["From"];
+  const mensaje = params["Body"] || "";
   const autorizados = leerNumerosAutorizados(process.env.WHATSAPP_NUMEROS_AUTORIZADOS);
   const numero = normalizarNumero(remitente);
   if (autorizados.size === 0) {
@@ -98,6 +106,13 @@ async function construirRespuesta(remitente: string | undefined, mensaje: string
     console.warn(`[whatsapp] Número no autorizado: ${enmascararNumero(remitente)}.`);
     return TEXTO_NO_AUTORIZADO;
   }
+
+  // Foto de sacos: se cuenta y se responde el total (no usa la base de datos).
+  const adjuntos = leerAdjuntos(params);
+  if (adjuntos.tipo === "imagen") {
+    return contarFotoWhatsapp(adjuntos.adjunto, adjuntos.adjuntos, params["AccountSid"], authToken);
+  }
+  if (adjuntos.tipo === "no_imagen") return TEXTO_FOTO_NO_IMAGEN;
 
   const comando = interpretarComando(mensaje);
   // Modo DEMO (solo con la BD local de demostración): lotes de prueba, siempre marcados.

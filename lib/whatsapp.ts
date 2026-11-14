@@ -122,7 +122,8 @@ export const TEXTO_AYUDA =
   "• *hoy* — producción de hoy\n" +
   "• *semana* — producción de los últimos 7 días\n" +
   "• *discrepancias* — diferencias con el contratista pendientes de revisión\n" +
-  "• *lote 123* — detalle de un lote\n\n" +
+  "• *lote 123* — detalle de un lote\n" +
+  "• 📷 Envíe una *foto* de los sacos y le respondo cuántos contó la IA\n\n" +
   "Solo se informan datos reales. La IA cuenta sacos; la clasificación la registra el personal.";
 
 export const TEXTO_NO_AUTORIZADO =
