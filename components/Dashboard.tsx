@@ -152,8 +152,10 @@ export function Dashboard() {
   }
 
   async function cargarUsuario() {
-    const res = await fetch("/api/auth/me", { cache: "no-store" });
-    const data = await res.json();
+    const res = await fetch("/api/auth/me", { cache: "no-store" }).catch(() => null);
+    // Servidor caído o respuesta sin JSON: no romper el panel (cargar() ya muestra el aviso de conexión).
+    const data = await res?.json().catch(() => null);
+    if (!res || !data) return;
     // Sesión revocada (cuenta desactivada, contraseña o rol cambiados) o vencida: volver al login.
     // Recarga completa: no quedan en pantalla los datos de la sesión anterior.
     if (res.ok && !data.usuario) {

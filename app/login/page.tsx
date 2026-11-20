@@ -23,13 +23,16 @@ export default function LoginPage() {
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        setError(data.error || "No se pudo iniciar sesión");
+        // Un 500 sin cuerpo (p. ej. base de datos caída) no trae JSON: no romper la página.
+        const data = await res.json().catch(() => null);
+        setError(data?.error || "Error del servidor. Intente de nuevo en unos minutos.");
         return;
       }
 
       router.push("/");
       router.refresh();
+    } catch {
+      setError("No se pudo conectar con el servidor.");
     } finally {
       setCargando(false);
     }
