@@ -1,7 +1,7 @@
 # Plan y resultados de pruebas del sistema
 
 Sistema de Conteo de Sacos de Zanahoria mediante Visión Computacional (MACROMEC).
-Ejecutado el 14/11/2026.
+Ejecutado el 14/11/2026 y ampliado el 21/11/2026 con los módulos nuevos (sección 4.1).
 
 ## 1. Objetivo
 
@@ -13,8 +13,9 @@ que representan la operación real.
 
 | Tipo de prueba | Qué comprueba | Casos | Resultado |
 |---|---|---|---|
-| Unitarias (Vitest) | Reglas de negocio sin servidor: ventas, inventario, validación, usuarios, WhatsApp, PDF, foto, video, respaldo | 127 | 127 pasan |
-| De sistema (caja negra) | Cada módulo a través de su API, contra el servidor compilado y una base de ensayo | 58 | 58 pasan |
+| Unitarias (Vitest) | Reglas de negocio sin servidor: ventas, inventario, validación, usuarios, WhatsApp, PDF, foto, video, respaldo, consulta por mes | 140 | 140 pasan |
+| De sistema (caja negra) | Cada módulo a través de su API, contra el servidor compilado y una base de ensayo | 58 + 14 | 72 pasan |
+| De interfaz (revisión visual, 21/11) | 14 módulos en PC, celular y tema oscuro: desbordes, letra menor de 12 px, errores de consola | 33 capturas | 0 problemas |
 | De interfaz (Chrome) | Botones «Exportar PDF» de 5 módulos y comprobantes de venta, sin errores en la consola | 9 | 9 pasan |
 | Real en producción | Foto de sacos enviada por WhatsApp al sistema publicado (Twilio y Roboflow reales) | 1 | 9 de 9 sacos, confianza 86.8 % |
 
@@ -91,6 +92,29 @@ que representan la operación real.
 | PS-57 | Panel | Resumen del panel | GET /api/conteo/resumen | 200 | 200 | Aprobado |
 | PS-58 | Panel | Estado de WhatsApp en el panel | GET /api/whatsapp/estado | 200 sin revelar secretos | 200 | Aprobado |
 
+### 4.1 Ampliación del 21/11/2026 (observaciones de la revisión del 20/11)
+
+Ejecutados contra el servidor local y la base de desarrollo, con un mensaje de WhatsApp firmado con la clave real de Twilio. Los datos creados por la prueba se borraron al terminar.
+
+| N.° | Módulo | Caso | Entrada | Resultado esperado | Resultado obtenido | Estado |
+|---|---|---|---|---|---|---|
+| PS-59 | Producción por mes | Resumen agrupado por mes | GET /api/conteo/resumen | Incluye `mensualPorEstado` con cada mes que tiene lotes | 200 · meses 2026-10 y 2026-11 | Aprobado |
+| PS-60 | Historial por mes | Lotes de un mes anterior | GET /api/conteo?desde=2026-10-01&hasta=2026-10-31 | Solo lotes de octubre, aunque no estén entre los más recientes | 200 · 8 lotes de octubre · hayMas=false | Aprobado |
+| PS-61 | Historial por mes | Fechas invertidas | desde=2026-11-30, hasta=2026-11-01 | 400 | 400 | Aprobado |
+| PS-62 | WhatsApp | Comando «mes 10» | mensaje firmado desde número autorizado | Responde la producción de octubre 2026 | «📅 Producción de octubre 2026 · hora de Lima…» | Aprobado |
+| PS-63 | WhatsApp | Número no autorizado | +51 900 000 001 | No entrega datos | «Este número no está autorizado…» | Aprobado |
+| PS-64 | Bitácora WhatsApp | Registro de los mensajes | consultar la bitácora | Ambos mensajes anotados con tipo y resultado | «mes / respondido» y «no_autorizado / rechazado» | Aprobado |
+| PS-65 | Bitácora WhatsApp | Privacidad | contenido de GET /api/whatsapp/mensajes | Sin el número completo | solo números enmascarados (+51•••••••46) | Aprobado |
+| PS-66 | Bandeja de fotos | Ver la foto recibida | GET /api/whatsapp/mensajes/:id/foto | Imagen JPEG | 200 image/jpeg | Aprobado |
+| PS-67 | Bandeja de fotos | Registrar la foto como lote | POST …/registrar (tipo prueba) | 201 y lote nuevo | 201 · lote #34 | Aprobado |
+| PS-68 | Bandeja de fotos | Doble clic al registrar | repetir POST …/registrar | No crea otro lote | 200 · mismo lote #34 | Aprobado |
+| PS-69 | Bandeja de fotos | Descartar una foto ya registrada | POST …/descartar | 409 conflicto | 409 | Aprobado |
+| PS-70 | Bandeja de fotos | Lote creado | consultar el lote #34 | Pendiente de validación, con la foto como evidencia y el total de la IA | 7 sacos · origen prueba_whatsapp · fuente whatsapp_foto · pendiente · 1 evidencia | Aprobado |
+| PS-71 | Bandeja de fotos | Permiso del cliente | el cliente pide la bitácora | 403 | 403 | Aprobado |
+| PS-72 | Acceso | Inicio de sesión del administrador (prueba de punta a punta) | correo y contraseña correctos | 200 | 200 | Aprobado |
+
+«Contar por video» se verifica con pruebas unitarias (`tests/conteo-video.test.ts`: seguimiento, cruce de línea y firmas de los fotogramas). Además se hizo una prueba real con un video y Roboflow (05/11/2026), en la que el panel contó 8 sacos.
+
 ## 5. Resumen por módulo
 
 | Módulo | Casos | Aprobados |
@@ -107,7 +131,10 @@ que representan la operación real.
 | Contar por foto | 3 | 3 |
 | Respaldo | 4 | 4 |
 | Panel | 2 | 2 |
-| **Total** | **58** | **58** |
+| Producción e historial por mes (21/11) | 3 | 3 |
+| WhatsApp: comando «mes», bitácora y bandeja de fotos (21/11) | 10 | 10 |
+| Acceso, prueba de punta a punta (21/11) | 1 | 1 |
+| **Total** | **72** | **72** |
 | Interfaz: reportes PDF y comprobantes | 9 | 9 |
 
 ## 6. Incidencias
@@ -120,8 +147,8 @@ que representan la operación real.
 
 ## 7. Conclusión
 
-Los 58 casos de sistema, las 127 pruebas unitarias, las 9 pruebas de interfaz y la prueba
-real por WhatsApp resultaron aprobados. El sistema valida los datos de entrada, respeta los
+Los 72 casos de sistema, las 140 pruebas unitarias, las 9 pruebas de interfaz, la revisión
+visual de 33 pantallas y la prueba real por WhatsApp resultaron aprobados. El sistema valida los datos de entrada, respeta los
 permisos por rol, impide duplicados (conteos y ventas), conserva el historial (evidencias y
 ventas anuladas no se borran) y mantiene coherente el inventario (disponible = conformes −
 vendidos) y permite descargar un respaldo completo sin contraseñas.

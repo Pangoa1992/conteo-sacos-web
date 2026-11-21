@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { ZONA_HORARIA_PLANTA, type EstadoValidacion } from "@/lib/conteos";
 import { usuarioDeSesion } from "@/lib/sesion-servidor";
 
-// Sin esto, Next 14 trata este GET (no lee la petición) como estático y en el
+// Sin esto, Next.js trata este GET (no lee la petición) como estático y en el
 // build lo congela con los datos de ese momento.
 export const dynamic = "force-dynamic";
 
