@@ -9,12 +9,13 @@
  * consultas sobre los lotes de PRUEBA de la BD de demostración; el webhook
  * marca cada respuesta «DEMO · datos de prueba». Por defecto, alcance "real".
  */
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { ETIQUETA_ESTADO_VALIDACION, UMBRAL_DISCREPANCIA, ZONA_HORARIA_PLANTA, type EstadoValidacion } from "./conteos";
 import { ordenVigenciaReporteSql } from "./reportes-contratista-servidor";
 import { textoDiferencia } from "./reportes-contratista";
-import { TEXTO_AYUDA, TEXTO_AYUDA_DEMO, TEXTO_LOTE_INVALIDO, type Comando } from "./whatsapp";
+import { TEXTO_AYUDA, TEXTO_AYUDA_DEMO, TEXTO_LOTE_INVALIDO, TEXTO_MES_INVALIDO, mesConsultado, type Comando } from "./whatsapp";
+import { etiquetaMes, rangoMes } from "./produccion-validada";
 
 const ZONA = sql.raw(`'${ZONA_HORARIA_PLANTA}'`);
 const FECHA = sql`coalesce(c.contado_en, c.creado_en)`;
@@ -81,7 +82,12 @@ type FilaPeriodo = {
 /** Producción por día (hora de Lima) de los últimos `dias` días, incluido hoy. */
 async function periodo(dias: number, a: AlcanceWhatsapp): Promise<{ hoy: string; filas: FilaPeriodo[] }> {
   const [{ hoy }] = await db.execute<{ hoy: string }>(sql`select ${HOY_PLANTA}::text as hoy`);
-  const filas = [...(await db.execute<FilaPeriodo>(sql`
+  return { hoy, filas: await filasPeriodo(sql`${HOY_PLANTA} - ${dias - 1}::int`, HOY_PLANTA, a) };
+}
+
+/** Producción por día (hora de Lima) entre dos fechas incluidas. */
+async function filasPeriodo(desde: SQL, hasta: SQL, a: AlcanceWhatsapp): Promise<FilaPeriodo[]> {
+  return [...(await db.execute<FilaPeriodo>(sql`
     select ${DIA_PLANTA}::text as dia, count(*)::int as lotes, sum(c.cantidad_sacos)::int as sacos,
       count(*) filter (where c.estado_validacion = 'aprobado')::int as aprobados,
       coalesce(sum(c.cantidad_sacos) filter (where c.estado_validacion = 'aprobado'), 0)::int as "sacosAprobados",
@@ -95,9 +101,8 @@ async function periodo(dias: number, a: AlcanceWhatsapp): Promise<{ hoy: string;
       count(*) filter (where c.estado_validacion = 'pendiente' and rv.cantidad_reportada is not null
         and abs(rv.cantidad_reportada - c.cantidad_sacos) > ${UMBRAL_DISCREPANCIA})::int as "discrepanciasPendientes"
     from conteos c ${REPORTE_VIGENTE}
-    where ${filtro(a)} and ${DIA_PLANTA} between ${HOY_PLANTA} - ${dias - 1}::int and ${HOY_PLANTA}
+    where ${filtro(a)} and ${DIA_PLANTA} between ${desde} and ${hasta}
     group by 1 order by 1`))];
-  return { hoy, filas };
 }
 
 function totales(filas: FilaPeriodo[]): FilaPeriodo {
@@ -134,6 +139,32 @@ async function semana(a: AlcanceWhatsapp): Promise<string> {
   return (
     `📊 Últimos 7 días (${diaCorto(desdeTexto)} al ${diaCorto(hoy)}, hora de Lima)\n` +
     `Lotes: ${fmt(t.lotes)} · Sacos detectados por la IA: *${fmt(t.sacos)}*\n` + bloqueValidacion(t) + `\n\nPor día:\n${porDia}`
+  );
+}
+
+/** Producción de un mes (por defecto el actual), con el detalle por semana. */
+async function mes(c: { mes: number | null; anio: number | null }, a: AlcanceWhatsapp): Promise<string> {
+  const [{ hoy }] = await db.execute<{ hoy: string }>(sql`select ${HOY_PLANTA}::text as hoy`);
+  const m = mesConsultado(c, hoy);
+  const { desde, hasta } = rangoMes(m);
+  if (desde > hoy) return `📅 ${etiquetaMes(m)} todavía no llega.`;
+  const filas = await filasPeriodo(sql`${desde}::date`, sql`${hasta}::date`, a);
+  const t = totales(filas);
+  const titulo = `📅 Producción de ${etiquetaMes(m)}${m === hoy.slice(0, 7) ? " (mes en curso)" : ""} · hora de Lima`;
+  if (t.lotes === 0) return `${titulo}\nNo hay conteos ${reales(a)} en ese mes.`;
+  // Semanas del mes: días 1–7, 8–14, 15–21, 22–28 y 29 al fin de mes.
+  const semanas = new Map<number, { lotes: number; sacos: number }>();
+  for (const f of filas) {
+    const s = Math.min(Math.floor((Number(f.dia.slice(8, 10)) - 1) / 7), 4);
+    const actual = semanas.get(s) ?? { lotes: 0, sacos: 0 };
+    semanas.set(s, { lotes: actual.lotes + f.lotes, sacos: actual.sacos + f.sacos });
+  }
+  const finMes = Number(hasta.slice(8, 10));
+  const porSemana = [...semanas.entries()].sort(([x], [y]) => x - y)
+    .map(([s, v]) => `• Del ${s * 7 + 1} al ${s === 4 ? finMes : s * 7 + 7}: ${lotes(v.lotes)} · ${sacos(v.sacos)}`).join("\n");
+  return (
+    `${titulo}\nLotes: ${fmt(t.lotes)} · Sacos detectados por la IA: *${fmt(t.sacos)}*\n` + bloqueValidacion(t) +
+    `\n\nPor semana:\n${porSemana}\n\nPara otro mes escriba, por ejemplo, *mes 10* o *mes octubre 2026*.`
   );
 }
 
@@ -195,6 +226,8 @@ export async function responderComando(c: Comando, alcance: AlcanceWhatsapp = "r
     case "discrepancias": return discrepancias(alcance);
     case "lote": return lote(c.lote, alcance);
     case "lote_invalido": return TEXTO_LOTE_INVALIDO;
+    case "mes": return mes(c, alcance);
+    case "mes_invalido": return TEXTO_MES_INVALIDO;
     case "ayuda":
     case "saludo": return alcance === "demo" ? TEXTO_AYUDA_DEMO : TEXTO_AYUDA;
   }

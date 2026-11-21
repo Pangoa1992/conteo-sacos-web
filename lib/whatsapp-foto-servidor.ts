@@ -61,32 +61,57 @@ export async function normalizarImagenWhatsapp(entrada: Buffer): Promise<{ image
   }
 }
 
+/** Foto contada: lo necesario para responder y guardarla en la bandeja del panel. */
+export type FotoContadaWhatsapp = {
+  total: number;
+  confianzaPromedio: number | null;
+  imagen: Buffer; // JPEG normalizado (sin metadatos, ≤ 1600 px)
+  ancho: number;
+  alto: number;
+};
+
+export type AnalisisFotoWhatsapp = { texto: string; ok: boolean; foto: FotoContadaWhatsapp | null };
+
 /**
- * Cuenta los sacos de la foto recibida por WhatsApp y devuelve el texto de respuesta.
- * Nunca lanza: cualquier fallo se convierte en un mensaje para el usuario. No usa la
- * base de datos ni guarda la foto.
+ * Cuenta los sacos de la foto recibida por WhatsApp. Nunca lanza: cualquier fallo se
+ * convierte en un mensaje para el usuario. No usa la base de datos: el webhook decide
+ * si guarda la foto (bitácora) y, en ese caso, vuelve a armar el texto con el n.º de bandeja.
  */
+export async function analizarFotoWhatsapp(
+  adjunto: AdjuntoWhatsapp,
+  adjuntos: number,
+  accountSid: string | undefined,
+  authToken: string
+): Promise<AnalisisFotoWhatsapp> {
+  if (!conteoFotoConfigurado()) return { texto: TEXTO_FOTO_NO_CONFIGURADO, ok: false, foto: null };
+  try {
+    const descargada = await descargarImagen(adjunto, accountSid, authToken);
+    const { imagen, ancho, alto } = await normalizarImagenWhatsapp(descargada);
+    const resultado = await detectarSacos(imagen, ancho, alto, TIEMPO_DETECCION_MS);
+    console.info(`[whatsapp] Foto contada: ${resultado.total} sacos (${ancho}x${alto}).`);
+    return {
+      texto: textoResultadoFoto(resultado, adjuntos),
+      ok: true,
+      foto: { total: resultado.total, confianzaPromedio: resultado.confianzaPromedio, imagen, ancho, alto },
+    };
+  } catch (err) {
+    if (err instanceof ImagenNoValida) return { texto: TEXTO_FOTO_INVALIDA, ok: false, foto: null };
+    if (err instanceof DeteccionNoDisponible) {
+      console.warn(`[whatsapp] Conteo por foto no disponible: ${err.message}`);
+      return { texto: TEXTO_FOTO_ERROR, ok: false, foto: null };
+    }
+    // Sin la URL del archivo ni datos de la cuenta en el registro.
+    console.error("[whatsapp] Error al contar la foto:", err instanceof Error ? err.message.slice(0, 120) : "desconocido");
+    return { texto: TEXTO_FOTO_ERROR, ok: false, foto: null };
+  }
+}
+
+/** Solo el texto de respuesta (sin guardar nada). */
 export async function contarFotoWhatsapp(
   adjunto: AdjuntoWhatsapp,
   adjuntos: number,
   accountSid: string | undefined,
   authToken: string
 ): Promise<string> {
-  if (!conteoFotoConfigurado()) return TEXTO_FOTO_NO_CONFIGURADO;
-  try {
-    const descargada = await descargarImagen(adjunto, accountSid, authToken);
-    const { imagen, ancho, alto } = await normalizarImagenWhatsapp(descargada);
-    const resultado = await detectarSacos(imagen, ancho, alto, TIEMPO_DETECCION_MS);
-    console.info(`[whatsapp] Foto contada: ${resultado.total} sacos (${ancho}x${alto}).`);
-    return textoResultadoFoto(resultado, adjuntos);
-  } catch (err) {
-    if (err instanceof ImagenNoValida) return TEXTO_FOTO_INVALIDA;
-    if (err instanceof DeteccionNoDisponible) {
-      console.warn(`[whatsapp] Conteo por foto no disponible: ${err.message}`);
-      return TEXTO_FOTO_ERROR;
-    }
-    // Sin la URL del archivo ni datos de la cuenta en el registro.
-    console.error("[whatsapp] Error al contar la foto:", err instanceof Error ? err.message.slice(0, 120) : "desconocido");
-    return TEXTO_FOTO_ERROR;
-  }
+  return (await analizarFotoWhatsapp(adjunto, adjuntos, accountSid, authToken)).texto;
 }

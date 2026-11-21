@@ -3,8 +3,10 @@
  * para poder probarlas por separado (ver lib/whatsapp-foto-servidor.ts).
  *
  * El personal autorizado manda una foto al número de WhatsApp y el bot responde
- * cuántos sacos contó el mismo modelo de «Contar por foto» (RF-DETR). La foto y el
- * resultado NO se guardan ni se registran como lote: para eso está el panel web.
+ * cuántos sacos contó el mismo modelo de «Contar por foto» (RF-DETR). Si la foto tiene
+ * sacos, se guarda (sin metadatos) en la bitácora de WhatsApp y aparece en la bandeja del
+ * panel: el personal decide si la registra como lote pendiente o la descarta. Por sí sola
+ * nunca crea un lote (lib/bitacora-whatsapp-servidor.ts).
  */
 
 /** Tipos de imagen que se aceptan (WhatsApp envía las fotos como JPEG). */
@@ -64,8 +66,11 @@ export type ResumenConteoWhatsapp = { total: number; confianzaPromedio: number |
 
 const formatoPorcentaje = (n: number) => `${n.toFixed(1)} %`;
 
-/** Respuesta con el resultado del conteo. */
-export function textoResultadoFoto(resultado: ResumenConteoWhatsapp, adjuntos = 1): string {
+/**
+ * Respuesta con el resultado del conteo. Con `bandeja` (número del mensaje guardado) avisa que
+ * la foto quedó en el panel para que el personal la registre como lote.
+ */
+export function textoResultadoFoto(resultado: ResumenConteoWhatsapp, adjuntos = 1, bandeja: number | null = null): string {
   const varias = adjuntos > 1 ? "\n\nℹ️ Llegaron varias fotos: se contó solo la primera. Envíe una foto por mensaje." : "";
   if (resultado.total === 0) {
     return "📷 Foto recibida.\n\n" +
@@ -77,8 +82,10 @@ export function textoResultadoFoto(resultado: ResumenConteoWhatsapp, adjuntos = 
     : "";
   return "📷 Foto recibida.\n\n" +
     `✅ Sacos contados: *${resultado.total}*${confianza}\n\n` +
-    "Conteo automático con IA (RF-DETR). Este resultado no se registra como lote; " +
-    "para registrarlo use «Contar por foto» en el panel web." + varias;
+    "Conteo automático con IA (RF-DETR). " +
+    (bandeja !== null
+      ? `📥 La foto quedó en el panel (WhatsApp → Fotos recibidas, n.º ${bandeja}): el personal la revisa y decide si la registra como lote.`
+      : "Este resultado no se registra como lote; para registrarlo use «Contar por foto» en el panel web.") + varias;
 }
 
 export const TEXTO_FOTO_NO_IMAGEN =

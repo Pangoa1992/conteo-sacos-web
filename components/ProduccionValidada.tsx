@@ -3,28 +3,35 @@
 import { BotonPdf } from "@/components/BotonPdf";
 import { useMemo, useState } from "react";
 import { ETIQUETA_ESTADO_VALIDACION } from "@/lib/conteos";
-import { porcentaje, resumirValidacion, type FilaValidacion } from "@/lib/produccion-validada";
+import {
+  etiquetaMes, mesesDisponibles, porcentaje, resumirPorMes, resumirValidacion,
+  type FilaValidacion, type FilaValidacionMensual,
+} from "@/lib/produccion-validada";
 import { ORDEN_PILA } from "./GraficoProduccion";
 
 export type FilaValidacionDiaria = FilaValidacion & { fecha: string };
 
-type Periodo = "hoy" | "7d" | "14d" | "historial";
+type Periodo = "hoy" | "7d" | "14d" | "mes" | "historial";
 
 const PERIODOS: { id: Periodo; texto: string; dias: number | null }[] = [
   { id: "hoy", texto: "Hoy", dias: 1 },
   { id: "7d", texto: "7 días", dias: 7 },
   { id: "14d", texto: "14 días", dias: 14 },
+  { id: "mes", texto: "Por mes", dias: null },
   { id: "historial", texto: "Historial", dias: null },
 ];
 
 type Props = {
   validacion: FilaValidacion[]; // todo el historial
   diarioPorEstado: FilaValidacionDiaria[]; // últimos días (hora de la planta)
+  mensualPorEstado: FilaValidacionMensual[]; // todo el historial agrupado por mes
   hoy: string | null;
   incluir: (esPrueba: boolean) => boolean; // vista real / prueba / todos
   esVistaPrueba: boolean;
   etiquetaVista: string;
   cargando: boolean;
+  /** Abre el historial filtrado por ese mes (AAAA-MM) para ver sus lotes. */
+  onVerLotesMes?: (mes: string) => void;
 };
 
 type Parte = { clave: string; etiqueta: string; sacos: number; lotes?: number };
@@ -82,17 +89,29 @@ function Composicion({ titulo, partes, total, vacio }: { titulo: string; partes:
  * Producción validada: reparte el total detectado por la IA según el estado
  * de validación de cada lote y muestra la clasificación manual de los lotes
  * aprobados. Los lotes se ubican en el periodo por la fecha del conteo.
+ * «Por mes» consulta cualquier mes anterior y la tabla compara todos los meses.
  */
-export function ProduccionValidada({ validacion, diarioPorEstado, hoy, incluir, esVistaPrueba, etiquetaVista, cargando }: Props) {
+export function ProduccionValidada({
+  validacion, diarioPorEstado, mensualPorEstado, hoy, incluir, esVistaPrueba, etiquetaVista, cargando, onVerLotesMes,
+}: Props) {
   const [periodo, setPeriodo] = useState<Periodo>("historial");
+  const [mesElegido, setMesElegido] = useState<string>("");
   const def = PERIODOS.find((p) => p.id === periodo)!;
+  const meses = useMemo(() => mesesDisponibles(mensualPorEstado, hoy, incluir), [mensualPorEstado, hoy, incluir]);
+  // Sin elegir, el mes actual (o el más reciente con lotes).
+  const mes = meses.includes(mesElegido) ? mesElegido : meses[0] ?? "";
+  const comparacion = useMemo(() => resumirPorMes(mensualPorEstado, incluir), [mensualPorEstado, incluir]);
 
   const r = useMemo(() => {
+    if (periodo === "mes") return resumirValidacion(mensualPorEstado.filter((f) => f.mes === mes), incluir);
     if (def.dias === null) return resumirValidacion(validacion, incluir);
     if (!hoy) return resumirValidacion([], incluir);
     const desde = restarDias(hoy, def.dias - 1);
     return resumirValidacion(diarioPorEstado.filter((f) => f.fecha >= desde && f.fecha <= hoy), incluir);
-  }, [validacion, diarioPorEstado, hoy, def, incluir]);
+  }, [validacion, diarioPorEstado, mensualPorEstado, mes, periodo, hoy, def, incluir]);
+
+  const textoPeriodo = periodo === "mes" ? (mes ? etiquetaMes(mes) : "sin meses")
+    : def.dias === null ? "todo el historial" : def.dias === 1 ? "hoy" : `últimos ${def.dias} días`;
 
   const total = r.detectado.sacos;
   const aprobado = r.porEstado.aprobado;
@@ -107,19 +126,31 @@ export function ProduccionValidada({ validacion, diarioPorEstado, hoy, incluir, 
         <div>
           <h2>Producción validada {esVistaPrueba && <span className="badge badge-prueba" title="Dato de prueba: no es una detección real">Prueba</span>}</h2>
           <p className="tarjeta-sub">
-            Lotes revisados por el personal · {def.dias === null ? "todo el historial" : def.dias === 1 ? "hoy" : `últimos ${def.dias} días`} · por fecha del conteo · {etiquetaVista.toLowerCase()}
+            {textoPeriodo[0].toUpperCase() + textoPeriodo.slice(1)} · {etiquetaVista.toLowerCase()}
           </p>
         </div>
         <div className="acciones-exportar">
-        <BotonPdf seccionId="validada" titulo="Producción validada" archivo="produccion-validada" esPrueba={esVistaPrueba} />
-        <div className="segmentado" role="radiogroup" aria-label="Periodo de producción validada">
-          {PERIODOS.map((p) => (
-            <button key={p.id} type="button" role="radio" aria-checked={periodo === p.id}
-              className={periodo === p.id ? "activo" : ""} onClick={() => setPeriodo(p.id)}>
-              {p.texto}
-            </button>
-          ))}
-        </div>
+          <div className="segmentado" role="radiogroup" aria-label="Periodo de producción validada">
+            {PERIODOS.map((p) => (
+              <button key={p.id} type="button" role="radio" aria-checked={periodo === p.id}
+                className={periodo === p.id ? "activo" : ""} onClick={() => setPeriodo(p.id)}>
+                {p.texto}
+              </button>
+            ))}
+          </div>
+          {periodo === "mes" && (
+            <label className="filtro-fecha">
+              Mes
+              <select value={mes} onChange={(e) => setMesElegido(e.target.value)}>
+                {meses.map((m) => <option key={m} value={m}>{etiquetaMes(m)}</option>)}
+              </select>
+            </label>
+          )}
+          {periodo === "mes" && mes && onVerLotesMes && (
+            <button type="button" className="btn-secundario" onClick={() => onVerLotesMes(mes)}>Ver lotes del mes</button>
+          )}
+          <BotonPdf seccionId="validada" titulo={`Producción validada · ${textoPeriodo}`}
+            archivo={periodo === "mes" && mes ? `produccion-validada-${mes}` : "produccion-validada"} esPrueba={esVistaPrueba} />
         </div>
       </div>
 
@@ -127,22 +158,22 @@ export function ProduccionValidada({ validacion, diarioPorEstado, hoy, incluir, 
         <div className="kpi">
           <span className="kpi-label">Detectado por la IA</span>
           <span className="kpi-valor">{v(total)}<span className="kpi-unidad">sacos</span></span>
-          <span className="kpi-sub">{lotes(r.detectado.registros)} · total original, sin modificar</span>
+          <span className="kpi-sub">{lotes(r.detectado.registros)} en el periodo</span>
         </div>
         <div className="kpi kpi-validada">
           <span className="kpi-label">Producción validada</span>
           <span className="kpi-valor">{v(aprobado.sacos)}<span className="kpi-unidad">sacos</span></span>
-          <span className="kpi-sub">{lotes(aprobado.registros)} aprobado{aprobado.registros === 1 ? "" : "s"} · {fmtPct(porcentaje(aprobado.sacos, total))} del detectado</span>
+          <span className="kpi-sub">{fmtPct(porcentaje(aprobado.sacos, total))} del detectado</span>
         </div>
         <div className="kpi">
           <span className="kpi-label">Sacos conformes</span>
           <span className="kpi-valor">{v(cls.conformes)}<span className="kpi-unidad">sacos</span></span>
-          <span className="kpi-sub">{fmtPct(porcentaje(cls.conformes, sumaClasificacion))} de la producción validada</span>
+          <span className="kpi-sub">{sumaClasificacion > 0 ? `${fmtPct(porcentaje(cls.conformes, sumaClasificacion))} de lo validado` : "sin lotes aprobados"}</span>
         </div>
         <div className="kpi">
           <span className="kpi-label">Pendientes de validar</span>
           <span className="kpi-valor">{v(r.porEstado.pendiente.sacos)}<span className="kpi-unidad">sacos</span></span>
-          <span className="kpi-sub">{lotes(r.porEstado.pendiente.registros)} sin revisar</span>
+          <span className="kpi-sub">{lotes(r.porEstado.pendiente.registros)}</span>
         </div>
       </div>
 
@@ -167,17 +198,56 @@ export function ProduccionValidada({ validacion, diarioPorEstado, hoy, incluir, 
 
       {!cargando && (sumaEstados === total && sumaClasificacion === aprobado.sacos ? (
         <p className="nota-comprobacion">
-          <span aria-hidden="true">✓</span> Aprobados + observados + rechazados + pendientes = {fmt(total)} sacos detectados por la IA.
-          La clasificación de los aprobados suma {fmt(sumaClasificacion)} sacos.
+          <span aria-hidden="true">✓</span> Totales cuadrados: los cuatro estados suman los {fmt(total)} sacos detectados.
         </p>
       ) : (
         <p className="nota-critica" role="alert">
           <span aria-hidden="true">⚠</span> Los totales no cuadran (estados {fmt(sumaEstados)} de {fmt(total)}; clasificación {fmt(sumaClasificacion)} de {fmt(aprobado.sacos)}). Revise los datos.
         </p>
       ))}
+
+      <div className="comparacion-meses">
+        <h3>Comparación mes a mes</h3>
+        {comparacion.length === 0 ? (
+          <p className="vacio">Todavía no hay lotes en esta vista.</p>
+        ) : (
+          <div className="tabla-scroll">
+            <table className="historial">
+              <thead>
+                <tr>
+                  <th>Mes</th>
+                  <th className="num">Lotes</th>
+                  <th className="num">Detectado por la IA</th>
+                  <th className="num">Producción validada</th>
+                  <th className="num">% validado</th>
+                  <th className="num">Conformes</th>
+                  <th className="num">Pendientes</th>
+                  <th aria-label="Acción"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {comparacion.map((m) => (
+                  <tr key={m.mes} className={periodo === "mes" && m.mes === mes ? "fila-seleccionada" : ""}>
+                    <td data-label="Mes" className="fuerte">{etiquetaMes(m.mes)}</td>
+                    <td data-label="Lotes" className="num">{fmt(m.detectado.registros)}</td>
+                    <td data-label="Detectado" className="num">{fmt(m.detectado.sacos)}</td>
+                    <td data-label="Validada" className="num fuerte">{fmt(m.porEstado.aprobado.sacos)}</td>
+                    <td data-label="% validado" className="num">{fmtPct(porcentaje(m.porEstado.aprobado.sacos, m.detectado.sacos))}</td>
+                    <td data-label="Conformes" className="num">{fmt(m.clasificacionAprobados.conformes)}</td>
+                    <td data-label="Pendientes" className="num">{lotes(m.porEstado.pendiente.registros)}</td>
+                    <td data-label="">
+                      <button type="button" className="btn-link" onClick={() => { setPeriodo("mes"); setMesElegido(m.mes); }}>Ver mes</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       <p className="tarjeta-sub">
-        Los lotes observados o rechazados conservan su conteo original, pero no suman a la producción validada.
-        La clasificación por estado físico la registra el personal al revisar el lote: el modelo de visión solo cuenta sacos.
+        Solo los lotes aprobados suman a la producción validada. La IA cuenta los sacos; la clasificación la registra el personal.
       </p>
     </section>
   );

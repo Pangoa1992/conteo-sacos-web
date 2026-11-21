@@ -50,6 +50,12 @@ export const TABLAS_RESPALDO = [
     descripcion: "Cuentas del sistema (sin contraseñas)",
     columnas: ["id", "nombre", "correo", "rol", "activo", "creado_en"],
   },
+  {
+    nombre: "mensajes_whatsapp",
+    descripcion: "Bitácora de WhatsApp: quién consultó (número enmascarado), qué pidió y qué pasó con sus fotos (sin imágenes)",
+    columnas: ["id", "recibido_en", "remitente", "contacto", "tipo", "resultado", "demo", "sacos", "confianza_promedio", "foto_sha256",
+      "foto_ancho", "foto_alto", "conteo_id", "revisado_por", "revisado_en", "descartada"],
+  },
 ] as const;
 
 export type TablaRespaldo = (typeof TABLAS_RESPALDO)[number]["nombre"];

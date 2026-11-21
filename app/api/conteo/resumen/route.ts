@@ -43,6 +43,7 @@ const COLUMNAS_VALIDACION = {
  *   - diarioPorEstado: lo mismo que diario, separado por estado de validación
  *     y con la clasificación manual de los lotes aprobados.
  *   - validacion: totales por estado de todo el historial (producción validada).
+ *   - mensualPorEstado: lo mismo agrupado por mes (AAAA-MM), para filtrar y comparar meses.
  * No calcula ni estima nada que no esté en la base de datos.
  */
 export async function GET(req: NextRequest) {
@@ -52,7 +53,7 @@ export async function GET(req: NextRequest) {
   }
 
   if (!process.env.DATABASE_URL) {
-    return NextResponse.json({ modoSimulado: true, hoy: null, diario: [], diarioPorEstado: [], validacion: [], fuentes: [] });
+    return NextResponse.json({ modoSimulado: true, hoy: null, diario: [], diarioPorEstado: [], validacion: [], mensualPorEstado: [], fuentes: [] });
   }
 
   const [{ hoy }] = await db.execute<{ hoy: string }>(sql`select ${HOY_PLANTA}::text as hoy`);
@@ -82,6 +83,14 @@ export async function GET(req: NextRequest) {
     .groupBy(sql`1`, sql`2`)
     .orderBy(sql`1`, sql`2`);
 
+  // Producción validada por MES (AAAA-MM, hora de la planta) de todo el historial:
+  // permite consultar meses anteriores y compararlos sin descargar los lotes.
+  const mensualPorEstado = await db
+    .select({ mes: sql<string>`to_char(${FECHA_PLANTA}, 'YYYY-MM')`, ...COLUMNAS_VALIDACION })
+    .from(conteos)
+    .groupBy(sql`1`, sql`2`, sql`3`)
+    .orderBy(sql`1`, sql`2`, sql`3`);
+
   const fuentes = await db
     .select({
       fuenteCamara: conteos.fuenteCamara,
@@ -102,6 +111,7 @@ export async function GET(req: NextRequest) {
     diario,
     diarioPorEstado,
     validacion,
+    mensualPorEstado,
     fuentes,
   });
 }

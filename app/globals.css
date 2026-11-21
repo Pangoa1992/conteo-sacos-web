@@ -1155,3 +1155,61 @@ a.btn-acento.deshabilitado { opacity: 0.5; cursor: default; pointer-events: none
 /* Módulo Respaldo */
 .kpi-valor-texto { font-size: 1.35rem; }
 .respaldo-nota { margin-top: 1rem; }
+
+/* ---- Pestañas de los módulos relacionados de un grupo del menú ---- */
+.pestanas-grupo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--linea);
+  margin: 0 0 1rem;
+}
+.pestanas-grupo a {
+  padding: 0.6rem 1rem;
+  color: var(--texto-2);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 0.92rem;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
+}
+.pestanas-grupo a:hover { color: var(--texto); }
+.pestanas-grupo a.activo { color: var(--texto); border-bottom-color: var(--naranja); font-weight: 600; }
+
+/* ---- Comparación de producción mes a mes ---- */
+.comparacion-meses { margin-top: 1.5rem; }
+.comparacion-meses h3 { font-size: 1rem; margin: 0 0 0.5rem; }
+.fila-seleccionada td { background: var(--info-bg); }
+.fila-seleccionada td:first-child { box-shadow: inset 3px 0 0 var(--info); }
+
+/* ---- Módulo WhatsApp: flujo, bandeja de fotos y bitácora ---- */
+#whatsapp h3 { font-size: 1rem; margin: 1.5rem 0 0.6rem; }
+.flujo-whatsapp { background: var(--superficie-2); border: 1px solid var(--linea); border-radius: 10px; padding: 0.25rem 1.1rem 0.9rem; }
+.flujo-pasos { margin: 0; padding-left: 1.2rem; display: grid; gap: 0.55rem; font-size: 0.9rem; color: var(--texto-2); }
+.flujo-pasos .fuerte { display: block; color: var(--texto); }
+.bandeja { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem; }
+.bandeja-foto { display: flex; gap: 1rem; align-items: flex-start; border: 1px solid var(--linea); border-radius: 10px; padding: 0.75rem; }
+.bandeja-foto img { width: 160px; height: 120px; object-fit: cover; border-radius: 6px; background: var(--superficie-2); display: block; }
+.bandeja-info { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
+.bandeja-acciones { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-top: 0.25rem; }
+@media (max-width: 600px) { .bandeja-foto { flex-direction: column; } .bandeja-foto img { width: 100%; height: auto; } }
+
+/* ---- Ajustes de presentación (revisión visual del 21/11/2026) ---- */
+/* Tema oscuro: el botón elegido de un selector debe distinguirse del fondo. */
+[data-theme="oscuro"] .segmentado button.activo { background: var(--azul-marca); color: #fff; }
+[data-theme="oscuro"] .page-head .segmentado button.activo { background: var(--navy-900); }
+/* Pasos de «¿Cómo funciona?» con título en negrita. */
+.flujo-pasos .fuerte { font-weight: 600; }
+.flujo-pasos li { line-height: 1.5; }
+/* Resumen: tarjeta principal + 6 indicadores en 3 columnas. */
+.kpis { grid-template-columns: minmax(0, 1.25fr) repeat(3, minmax(0, 1fr)); }
+@media (max-width: 1100px) {
+  .kpis { grid-template-columns: minmax(0, 1.25fr) repeat(2, minmax(0, 1fr)); }
+  .kpi-hero { grid-row: span 3; }
+}
+@media (max-width: 600px) {
+  .kpis { grid-template-columns: 1fr 1fr; }
+  .kpi-hero { grid-row: auto; }
+  /* Selector de periodo: botones en una sola línea, sin partir «7 días». */
+  .segmentado button { white-space: nowrap; padding: 0.4rem 0.35rem; font-size: 0.8rem; }
+}

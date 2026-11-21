@@ -178,3 +178,37 @@ export const respaldos = pgTable("respaldos", {
   bytes: integer("bytes").notNull(),
   sha256: char("sha256", { length: 64 }).notNull(),
 });
+
+/**
+ * Bitácora de WhatsApp (observación de la entrega del 20/11/2026): cada mensaje que
+ * llega por el webhook firmado de Twilio queda anotado, para saber QUIÉN consulta
+ * (número enmascarado y nombre del contacto autorizado), QUÉ pidió y QUÉ se respondió.
+ * Las fotos con sacos se guardan (sin metadatos) en mensajes_whatsapp_foto y quedan en
+ * la bandeja del panel: el personal decide si las registra como lote o las descarta.
+ * Nunca se guarda el número completo ni el texto libre del mensaje.
+ */
+export const mensajesWhatsapp = pgTable("mensajes_whatsapp", {
+  id: serial("id").primaryKey(),
+  recibidoEn: timestamp("recibido_en").notNull().defaultNow(),
+  remitente: varchar("remitente", { length: 40 }).notNull(), // enmascarado: +51•••••••34
+  contacto: varchar("contacto", { length: 60 }), // nombre de WHATSAPP_NUMEROS_AUTORIZADOS (Nombre=+51…)
+  tipo: varchar("tipo", { length: 20 }).notNull(), // comando (hoy, semana, mes…), foto, no_imagen, no_autorizado
+  resultado: varchar("resultado", { length: 20 }).notNull(), // respondido | rechazado | error
+  demo: boolean("demo").notNull().default(false),
+  // Solo fotos: resultado de la IA y la imagen guardada.
+  sacos: integer("sacos"),
+  confianzaPromedio: numeric("confianza_promedio", { precision: 5, scale: 2 }),
+  fotoSha256: char("foto_sha256", { length: 64 }),
+  fotoAncho: integer("foto_ancho"),
+  fotoAlto: integer("foto_alto"),
+  // Decisión del personal sobre la foto: registrada como lote o descartada.
+  conteoId: integer("conteo_id").references(() => conteos.id),
+  revisadoPor: integer("revisado_por").references(() => usuarios.id),
+  revisadoEn: timestamp("revisado_en"),
+  descartada: boolean("descartada").notNull().default(false),
+});
+
+export const mensajesWhatsappFoto = pgTable("mensajes_whatsapp_foto", {
+  mensajeId: integer("mensaje_id").primaryKey().references(() => mensajesWhatsapp.id),
+  imagen: bytea("imagen").notNull(),
+});

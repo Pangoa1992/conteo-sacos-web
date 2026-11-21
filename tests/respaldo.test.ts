@@ -10,7 +10,7 @@ describe("Módulo Respaldo", () => {
 
   it("incluye todas las tablas de datos del negocio, cada una con id", () => {
     expect(TABLAS_RESPALDO.map((t) => t.nombre)).toEqual(
-      ["conteos", "validaciones_conteo", "reportes_contratista", "ventas_lote", "ventas", "evidencias", "usuarios"]);
+      ["conteos", "validaciones_conteo", "reportes_contratista", "ventas_lote", "ventas", "evidencias", "usuarios", "mensajes_whatsapp"]);
     for (const t of TABLAS_RESPALDO) expect(t.columnas[0]).toBe("id");
   });
 

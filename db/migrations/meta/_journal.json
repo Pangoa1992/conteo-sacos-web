@@ -71,6 +71,13 @@
       "when": 1794681478394,
       "tag": "0009_respaldos",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1795276616208,
+      "tag": "0010_whatsapp_bitacora",
+      "breakpoints": true
     }
   ]
 }

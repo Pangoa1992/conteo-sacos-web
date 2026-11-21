@@ -15,7 +15,7 @@ import {
   hayDiscrepancia,
   type EstadoValidacion,
 } from "@/lib/conteos";
-import { construirCsv } from "@/lib/inventario";
+import { construirCsv, esFechaValida } from "@/lib/inventario";
 import { leerFiltrosHistorial } from "@/lib/historial";
 import { ORDEN_VIGENCIA_REPORTE, ordenVigenciaReporteSql } from "@/lib/reportes-contratista-servidor";
 
@@ -59,6 +59,9 @@ const conteoInputSchema = z.object({
  * el dashboard muestre la alerta correspondiente.
  *
  * Parámetro opcional ?limite=N (1–200, por defecto 20).
+ * Opcionales ?desde=AAAA-MM-DD y ?hasta=AAAA-MM-DD (fecha original del conteo, hora de Lima):
+ * traen los lotes de ese periodo aunque sean de meses anteriores. «hayMas» indica que el
+ * periodo tiene más lotes que el límite (el CSV los exporta todos).
  * Cada conteo incluye esPrueba (origen "prueba*") para que el dashboard
  * nunca mezcle datos de prueba con producción real, y fechaConteo: la
  * fecha real del lote (contadoEn) o, si no la tiene, la de recepción. Si hay varios
@@ -85,6 +88,16 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  const desde = req.nextUrl.searchParams.get("desde") || null;
+  const hasta = req.nextUrl.searchParams.get("hasta") || null;
+  if ((desde && !esFechaValida(desde)) || (hasta && !esFechaValida(hasta)) || (desde && hasta && desde > hasta)) {
+    return NextResponse.json({ error: "Fechas inválidas: use AAAA-MM-DD y «desde» no posterior a «hasta»." }, { status: 400 });
+  }
+  const FECHA_DIA = sql`((coalesce(${conteos.contadoEn}, ${conteos.creadoEn}) at time zone 'UTC') at time zone ${ZONA})::date`;
+  const condiciones: SQL[] = [sql`true`];
+  if (desde) condiciones.push(sql`${FECHA_DIA} >= ${desde}::date`);
+  if (hasta) condiciones.push(sql`${FECHA_DIA} <= ${hasta}::date`);
+
   const limiteParam = Number(req.nextUrl.searchParams.get("limite"));
   const limite = Number.isInteger(limiteParam) && limiteParam > 0
     ? Math.min(limiteParam, LIMITE_MAXIMO)
@@ -96,9 +109,11 @@ export async function GET(req: NextRequest) {
     .select({ conteo: conteos, validadoPorNombre: usuarios.nombre })
     .from(conteos)
     .leftJoin(usuarios, eq(conteos.validadoPor, usuarios.id))
+    .where(sql.join(condiciones, sql` and `))
     .orderBy(desc(sql`coalesce(${conteos.contadoEn}, ${conteos.creadoEn})`), desc(conteos.id))
-    .limit(limite);
-  const ultimos = filas.map((f) => ({ ...f.conteo, validadoPorNombre: f.validadoPorNombre }));
+    .limit(limite + 1);
+  const hayMas = filas.length > limite;
+  const ultimos = filas.slice(0, limite).map((f) => ({ ...f.conteo, validadoPorNombre: f.validadoPorNombre }));
 
   // Una sola consulta para todos los reportes (antes: una por conteo).
   const reportes = ultimos.length
@@ -127,7 +142,7 @@ export async function GET(req: NextRequest) {
     };
   });
 
-  return NextResponse.json({ modoSimulado: false, conteos: conteosConAlerta });
+  return NextResponse.json({ modoSimulado: false, conteos: conteosConAlerta, hayMas });
 }
 
 /**

@@ -8,11 +8,12 @@ Proyecto de innovación SENATI. El módulo de visión (RF-DETR + DeepSORT) está
 
 | Módulo | Personal MACROMEC (`admin_macromec`) | Cliente (`cliente`) |
 |---|---|---|
-| Resumen, producción validada, producción diaria, cámaras, historial | ✅ | ✅ |
+| Resumen, producción validada (por día, **por mes** y comparación mes a mes), producción diaria, cámaras, historial (consulta de **meses anteriores**) | ✅ | ✅ |
 | Validación de lotes y clasificación manual (conformes / observados / defectuosos) | registra | consulta |
 | Evidencias fotográficas desde el celular | sube y anula | ve las activas |
 | Reportes del contratista y discrepancias (\|diferencia\| > 1 saco) | registra | consulta |
-| Inventario de sacos conformes, ventas parciales, estado de WhatsApp | ✅ | — |
+| Inventario de sacos conformes, ventas parciales | ✅ | — |
+| WhatsApp: cómo funciona, estado, **bitácora** (quién consultó, qué pidió, resultado) y **bandeja de fotos** para registrarlas como lote | ✅ | — |
 | Contar sacos por foto (RF-DETR) y registrar el resultado como lote | ✅ | — |
 | Contar sacos en un video desde el panel (sin terminal) y registrar el resultado como lote | ✅ | — |
 | Exportación CSV (historial completo, inventario, reportes) | ✅ | ✅ (lo que puede ver) |
@@ -20,6 +21,34 @@ Proyecto de innovación SENATI. El módulo de visión (RF-DETR + DeepSORT) está
 | Mi cuenta: cambiar la contraseña propia (pide la actual) | ✅ | ✅ |
 
 Los datos de prueba (`origen` que empieza por `prueba`) nunca se mezclan con los reales: el panel tiene vistas Reales / Prueba / Todos.
+
+### Menú agrupado
+
+Los módulos relacionados van juntos y se eligen con pestañas dentro del grupo (los enlaces `#historial`, `#ventas`… siguen funcionando):
+
+| Menú | Pestañas |
+|---|---|
+| Resumen | Indicadores · Cámaras y fuentes |
+| Producción | Producción validada · Producción diaria |
+| Lotes y contratistas | Historial de lotes · Reportes del contratista |
+| Registrar conteo | Por foto · Por video |
+| Inventario y ventas | Inventario · Ventas |
+| WhatsApp | (un solo módulo) |
+| Administración | Usuarios · Respaldo |
+| Mi cuenta | (un solo módulo) |
+
+### Consulta por mes
+
+- **Producción validada → Por mes**: elige cualquier mes con lotes; la tabla *Comparación mes a mes* muestra todos los meses (detectado, validado, % validado, conformes, pendientes) y «Ver lotes del mes» abre el historial filtrado. `GET /api/conteo/resumen` devuelve `mensualPorEstado` agregado en PostgreSQL (hora de Lima).
+- **Historial → Mes** (o Desde / Hasta): pide al servidor los lotes de ese periodo (`GET /api/conteo?desde=&hasta=`), aunque no estén entre los 200 más recientes; si el periodo tiene más, lo avisa y el CSV los exporta todos.
+- **WhatsApp → `mes`**: `mes` (mes en curso), `mes 10`, `mes 10/2025`, `mes octubre`, `octubre 2025`; responde lotes, sacos, validación y el detalle por semana.
+
+### WhatsApp: quién lo usa y adónde van los datos
+
+1. **Quién lo usa**: solo los números de `WHATSAPP_NUMEROS_AUTORIZADOS`, opcionalmente con nombre (`Juan Pérez=+51…`). Los demás reciben «no autorizado».
+2. **Quién lo recibe**: Twilio recibe el mensaje y lo reenvía al webhook con firma `X-Twilio-Signature`; sin firma válida se rechaza.
+3. **De dónde sale la respuesta**: de la misma base PostgreSQL y con las reglas del panel (solo lotes reales, hora de Lima); nunca ventas ni inventario. Las fotos las cuenta el mismo RF-DETR de «Contar por foto».
+4. **Adónde van los datos**: cada mensaje se anota en `mensajes_whatsapp` (número enmascarado, contacto, comando, resultado; nunca el número completo ni el texto libre). Las fotos con sacos se guardan normalizadas (sin metadatos) en `mensajes_whatsapp_foto` y aparecen en **WhatsApp → Fotos recibidas**: el personal las **registra como lote pendiente** (origen `whatsapp`, fuente `whatsapp_foto`, con la foto como evidencia) o las **descarta**. Nada entra a la producción sin revisión.
 
 ### Usuarios
 
@@ -44,7 +73,7 @@ Los datos de prueba (`origen` que empieza por `prueba`) nunca se mezclan con los
 ## Arquitectura
 
 - **Next.js 15 (App Router) + React 19 + TypeScript**: páginas y API REST en el mismo proyecto.
-- **PostgreSQL** con **Drizzle ORM**: 8 tablas, 12 claves foráneas, restricciones CHECK y 14 triggers (stock, ventas históricas congeladas, evidencias sin borrado). Migraciones en `db/migrations` (0000–0008).
+- **PostgreSQL** con **Drizzle ORM**: 11 tablas, 16 claves foráneas, restricciones CHECK y 14 triggers (stock, ventas históricas congeladas, evidencias sin borrado). Migraciones en `db/migrations` (0000–0010; la 0010 crea la bitácora de WhatsApp).
 - **Módulo de visión (Python)** → `POST /api/conteo` con token, idempotente por `id_externo`.
 - **Roboflow Serverless** (RF-DETR) para Contar por foto y por video, solo desde el servidor.
 - **Twilio** (WhatsApp) mediante webhook firmado.
@@ -115,6 +144,7 @@ Las pruebas de integración (API con base de datos, interfaz en Chrome, capturas
 | `GET/POST /api/contar-foto`, `POST /api/contar-foto/registrar` | Contar sacos por foto y registrar el lote |
 | `POST /api/contar-video/fotograma`, `POST /api/contar-video/registrar` | Contar sacos en un video y registrar el lote |
 | `POST /api/whatsapp/webhook`, `GET /api/whatsapp/estado` | WhatsApp |
+| `GET /api/whatsapp/mensajes`, `GET /api/whatsapp/mensajes/:id/foto`, `POST /api/whatsapp/mensajes/:id/registrar` · `/descartar` | Bitácora y bandeja de fotos de WhatsApp (solo administrador) |
 
 ## Estado del despliegue
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { VentasModule } from "./VentasModule";
 import { InventarioModule } from "./InventarioModule";
@@ -16,7 +16,7 @@ import { UsuariosModule } from "./UsuariosModule";
 import { RespaldoModule } from "./RespaldoModule";
 import { MiCuenta } from "./MiCuenta";
 import { ESTADOS_VALIDACION, ETIQUETA_ESTADO_VALIDACION, type EstadoValidacion } from "@/lib/conteos";
-import type { FilaValidacion } from "@/lib/produccion-validada";
+import { etiquetaMes, mesesDisponibles, porcentaje, rangoMes, resumirValidacion, type FilaValidacion, type FilaValidacionMensual } from "@/lib/produccion-validada";
 import { parametrosHistorial } from "@/lib/historial";
 import { BotonPdf } from "@/components/BotonPdf";
 
@@ -48,6 +48,7 @@ type Resumen = {
   diasSerie?: number;
   diarioPorEstado?: FilaValidacionDiaria[];
   validacion?: FilaValidacion[];
+  mensualPorEstado?: FilaValidacionMensual[];
   fuentes: Fuente[];
 };
 
@@ -62,6 +63,29 @@ type Usuario = {
 type Vista = "real" | "prueba" | "todos";
 
 const LIMITE_HISTORIAL = 200;
+
+type Modulo = { id: string; texto: string };
+type Grupo = { id: string; texto: string; modulos: Modulo[] };
+
+/**
+ * Menú agrupado (observación de la entrega del 20/11/2026): los módulos que se relacionan
+ * van juntos y se eligen con pestañas dentro del grupo. El hash de la URL sigue siendo el
+ * del módulo (#historial, #ventas…), así los enlaces anteriores siguen funcionando.
+ */
+function gruposDelMenu(esAdmin: boolean, conCuenta: boolean): Grupo[] {
+  return [
+    { id: "g-resumen", texto: "Resumen", modulos: [{ id: "resumen", texto: "Indicadores" }, { id: "camaras", texto: "Cámaras y fuentes" }] },
+    { id: "g-produccion", texto: "Producción", modulos: [{ id: "validada", texto: "Producción validada" }, { id: "produccion", texto: "Producción diaria" }] },
+    { id: "g-lotes", texto: "Lotes y contratistas", modulos: [{ id: "historial", texto: "Historial de lotes" }, { id: "contratistas", texto: "Reportes del contratista" }] },
+    ...(esAdmin ? [
+      { id: "g-registrar", texto: "Registrar conteo", modulos: [{ id: "foto", texto: "Por foto" }, { id: "video", texto: "Por video" }] },
+      { id: "g-comercial", texto: "Inventario y ventas", modulos: [{ id: "inventario", texto: "Inventario" }, { id: "ventas", texto: "Ventas" }] },
+      { id: "g-whatsapp", texto: "WhatsApp", modulos: [{ id: "whatsapp", texto: "WhatsApp" }] },
+      { id: "g-admin", texto: "Administración", modulos: [{ id: "usuarios", texto: "Usuarios" }, { id: "respaldo", texto: "Respaldo" }] },
+    ] : []),
+    ...(conCuenta ? [{ id: "g-cuenta", texto: "Mi cuenta", modulos: [{ id: "cuenta", texto: "Mi cuenta" }] }] : []),
+  ];
+}
 const INTERVALO_ACTUALIZACION_MS = 10_000;
 
 const fmt = (n: number) => n.toLocaleString("es-PE");
@@ -127,6 +151,10 @@ export function Dashboard() {
   const [filtroHasta, setFiltroHasta] = useState("");
   const [soloDiscrepancias, setSoloDiscrepancias] = useState(false);
   const [filtroValidacion, setFiltroValidacion] = useState<EstadoValidacion | "">("");
+  // Lotes del periodo elegido traídos del servidor (meses anteriores incluidos); null = últimos LIMITE_HISTORIAL.
+  const [conteosPeriodo, setConteosPeriodo] = useState<Conteo[] | null>(null);
+  const [hayMasPeriodo, setHayMasPeriodo] = useState(false);
+  const [cargandoPeriodo, setCargandoPeriodo] = useState(false);
   const [exportando, setExportando] = useState(false);
   const [errorExportar, setErrorExportar] = useState<string | null>(null);
 
@@ -223,6 +251,11 @@ export function Dashboard() {
   }, [resumen, hoy, diasSerie, enVista]);
 
   const produccionHoy = dias.find((d) => d.fecha === hoy);
+  // Mes en curso (hora de Lima): detectado y validado, para el Resumen.
+  const mesActual = useMemo(() => {
+    const mes = hoy?.slice(0, 7);
+    return resumirValidacion((resumen?.mensualPorEstado ?? []).filter((f) => f.mes === mes), enVista);
+  }, [resumen, hoy, enVista]);
   const ultimos7 = dias.slice(-7).reduce((s, d) => s + d.totalSacos, 0);
   const previos7 = dias.slice(-14, -7).reduce((s, d) => s + d.totalSacos, 0);
   const tendencia = previos7 > 0 ? Math.round(((ultimos7 - previos7) / previos7) * 100) : null;
@@ -237,8 +270,51 @@ export function Dashboard() {
   const pendientesVista = conteosVista.filter((c) => estadoDe(c) === "pendiente").length;
 
   // ---- Historial con filtros ----
+  // Con fechas, el historial pide al servidor los lotes de ese periodo: así se consultan meses
+  // anteriores aunque no estén entre los últimos LIMITE_HISTORIAL. Se refresca con el panel.
+  const hayPeriodo = !!(filtroDesde || filtroHasta);
+  useEffect(() => {
+    if (!hayPeriodo || modoSimulado) {
+      setConteosPeriodo(null);
+      setHayMasPeriodo(false);
+      return;
+    }
+    let vigente = true;
+    const p = new URLSearchParams({ limite: String(LIMITE_HISTORIAL) });
+    if (filtroDesde) p.set("desde", filtroDesde);
+    if (filtroHasta) p.set("hasta", filtroHasta);
+    setCargandoPeriodo(true);
+    fetch(`/api/conteo?${p}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+      .then((data) => {
+        if (!vigente || !data) return;
+        setConteosPeriodo(data.conteos ?? []);
+        setHayMasPeriodo(!!data.hayMas);
+      })
+      .finally(() => { if (vigente) setCargandoPeriodo(false); });
+    return () => { vigente = false; };
+  }, [hayPeriodo, filtroDesde, filtroHasta, modoSimulado, actualizadoEn]);
+
+  const conteosHistorial = useMemo(
+    () => (conteosPeriodo ? conteosPeriodo.filter((c) => enVista(esPrueba(c))) : conteosVista),
+    [conteosPeriodo, conteosVista, enVista, esPrueba]
+  );
+  const mesesHistorial = useMemo(
+    () => mesesDisponibles(resumen?.mensualPorEstado ?? [], hoy, enVista),
+    [resumen, hoy, enVista]
+  );
+  // Mes elegido: el que corresponde exactamente a Desde / Hasta.
+  const mesFiltro = mesesHistorial.find((m) => { const r = rangoMes(m); return r.desde === filtroDesde && r.hasta === filtroHasta; }) ?? "";
+  function elegirMes(mes: string) {
+    if (!mes) { setFiltroDesde(""); setFiltroHasta(""); return; }
+    const r = rangoMes(mes);
+    setFiltroDesde(r.desde);
+    setFiltroHasta(r.hasta);
+  }
+
   const conteosFiltrados = useMemo(() => {
-    return conteosVista.filter((c) => {
+    return conteosHistorial.filter((c) => {
       if (soloDiscrepancias && !c.discrepancia) return false;
       if (filtroValidacion && estadoDe(c) !== filtroValidacion) return false;
       if (filtroCamara && !(c.fuenteCamara ?? "").toLowerCase().includes(filtroCamara.toLowerCase())) return false;
@@ -247,7 +323,7 @@ export function Dashboard() {
       if (filtroHasta && fecha > new Date(`${filtroHasta}T23:59:59.999`)) return false;
       return true;
     });
-  }, [conteosVista, filtroCamara, filtroDesde, filtroHasta, soloDiscrepancias, filtroValidacion]);
+  }, [conteosHistorial, filtroCamara, filtroDesde, filtroHasta, soloDiscrepancias, filtroValidacion]);
 
   const totalFiltrado = conteosFiltrados.reduce((sum, c) => sum + c.cantidadSacos, 0);
   const hayDiscrepanciasFiltradas = conteosFiltrados.some((c) => c.discrepancia);
@@ -306,16 +382,8 @@ export function Dashboard() {
     reporteVigente: c.reporteContratista ?? null,
   })), [conteosVista, esPrueba]);
 
-  const secciones = [
-    { id: "resumen", texto: "Resumen" },
-    { id: "validada", texto: "Producción validada" },
-    { id: "produccion", texto: "Producción diaria" },
-    { id: "camaras", texto: "Cámaras" },
-    { id: "historial", texto: "Historial" },
-    { id: "contratistas", texto: "Contratistas" },
-    ...(esAdmin ? [{ id: "inventario", texto: "Inventario" }, { id: "ventas", texto: "Ventas" }, { id: "whatsapp", texto: "WhatsApp" }, { id: "foto", texto: "Contar por foto" }, { id: "video", texto: "Contar por video" }, { id: "usuarios", texto: "Usuarios" }, { id: "respaldo", texto: "Respaldo" }] : []),
-    ...(usuario ? [{ id: "cuenta", texto: "Mi cuenta" }] : []),
-  ];
+  const grupos = gruposDelMenu(esAdmin, !!usuario);
+  const secciones = grupos.flatMap((g) => g.modulos);
 
   // Navegación por módulos: el menú cambia el hash (#historial…) y el área principal muestra solo ese
   // módulo. El hash permite enlaces directos y atrás/adelante del navegador.
@@ -348,6 +416,26 @@ export function Dashboard() {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [seccionActiva]);
   const oculto = (id: string) => seccionActiva !== id;
+  const grupoActivo = grupos.find((g) => g.modulos.some((m) => m.id === seccionActiva)) ?? grupos[0];
+
+  /** Abre un módulo: entrada nueva en el historial del navegador y vuelta arriba. */
+  function irA(id: string, e?: MouseEvent) {
+    setMenuAbierto(false);
+    // Ctrl/Cmd/Mayús o botón central: comportamiento del navegador (abrir en otra pestaña).
+    if (e && (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey)) return;
+    // Sin el salto del navegador al ancla, que dejaba la sección bajo la barra fija del celular,
+    // también al pulsar el módulo ya abierto: siempre se vuelve arriba.
+    e?.preventDefault();
+    if (window.location.hash !== `#${id}`) window.history.pushState(null, "", `#${id}`);
+    setSeccionPedida(id);
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }
+
+  /** Desde Producción validada: historial con los lotes de ese mes. */
+  function verLotesDelMes(mes: string) {
+    elegirMes(mes);
+    irA("historial");
+  }
 
   const etiquetaVista = { real: "Datos reales", prueba: "Datos de prueba", todos: "Todos los datos" }[vista];
 
@@ -374,24 +462,14 @@ export function Dashboard() {
 
         <div className={`sidebar-cuerpo ${menuAbierto ? "abierto" : ""}`}>
           <nav id="nav-principal" className="sidebar-nav" aria-label="Secciones del panel">
-            {secciones.map((s) => (
+            {grupos.map((g) => (
               <a
-                key={s.id}
-                href={`#${s.id}`}
-                aria-current={seccionActiva === s.id ? "location" : undefined}
-                onClick={(e) => {
-                  setMenuAbierto(false);
-                  // Ctrl/Cmd/Mayús o botón central: comportamiento del navegador (abrir en otra pestaña).
-                  if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
-                  // Sin el salto del navegador al ancla, que dejaba la sección bajo la barra fija del celular,
-                  // también al pulsar el módulo ya abierto: siempre se vuelve arriba.
-                  e.preventDefault();
-                  if (window.location.hash !== `#${s.id}`) window.history.pushState(null, "", `#${s.id}`);
-                  setSeccionPedida(s.id);
-                  window.scrollTo({ top: 0, behavior: "instant" });
-                }}
+                key={g.id}
+                href={`#${g.modulos[0].id}`}
+                aria-current={grupoActivo?.id === g.id ? "location" : undefined}
+                onClick={(e) => irA(g.modulos[0].id, e)}
               >
-                {s.texto}
+                {g.texto}
               </a>
             ))}
           </nav>
@@ -456,7 +534,7 @@ export function Dashboard() {
         {vista !== "real" && !modoSimulado && (
           <div className="aviso aviso-prueba">
             {vista === "prueba"
-              ? "Estás viendo DATOS DE PRUEBA. No corresponden a detecciones reales del sistema de visión."
+              ? "Estás viendo DATOS DE PRUEBA (no son detecciones reales)."
               : "Vista combinada: los datos de prueba están marcados con la etiqueta «Prueba»."}
           </div>
         )}
@@ -471,14 +549,26 @@ export function Dashboard() {
             )}
           </div>
         )}
-        {discrepanciasVista > 0 && (
+        {discrepanciasVista > 0 && (grupoActivo?.id === "g-resumen" || grupoActivo?.id === "g-lotes") && (
           <div className="aviso aviso-critico">
-            <span aria-hidden="true">⚠</span> {discrepanciasVista} conteo{discrepanciasVista !== 1 ? "s" : ""} con discrepancia
-            entre el conteo automático y el reporte del contratista.{" "}
+            <span aria-hidden="true">⚠</span> {discrepanciasVista} lote{discrepanciasVista !== 1 ? "s" : ""} con discrepancia
+            entre la IA y el reporte del contratista.{" "}
             <button type="button" className="btn-link" onClick={() => { setSoloDiscrepancias(true); location.hash = "historial"; }}>
               Revisar
             </button>
           </div>
+        )}
+
+        {/* ---- Pestañas del grupo (módulos relacionados) ---- */}
+        {grupoActivo && grupoActivo.modulos.length > 1 && (
+          <nav className="pestanas-grupo" aria-label={`Módulos de ${grupoActivo.texto}`}>
+            {grupoActivo.modulos.map((m) => (
+              <a key={m.id} href={`#${m.id}`} className={seccionActiva === m.id ? "activo" : ""}
+                aria-current={seccionActiva === m.id ? "page" : undefined} onClick={(e) => irA(m.id, e)}>
+                {m.texto}
+              </a>
+            ))}
+          </nav>
         )}
 
         {/* ---- Módulos: solo se ve el seleccionado. Siguen montados (hidden) para conservar sus datos y filtros. ---- */}
@@ -489,7 +579,7 @@ export function Dashboard() {
             <span className="kpi-label">Producción de hoy</span>
             <span className="kpi-valor">{cargando ? "—" : fmt(produccionHoy?.totalSacos ?? 0)}<span className="kpi-unidad">sacos</span></span>
             <span className="kpi-sub">
-              {produccionHoy?.registros ?? 0} registro{(produccionHoy?.registros ?? 0) !== 1 ? "s" : ""} hoy
+              {produccionHoy?.registros ?? 0} lote{(produccionHoy?.registros ?? 0) !== 1 ? "s" : ""} hoy
               {vista !== "real" && <> · <EtiquetaPrueba /></>}
             </span>
           </div>
@@ -507,12 +597,22 @@ export function Dashboard() {
             <span className="kpi-valor">{fmt(ultimos7)}</span>
             <span className="kpi-sub">
               {tendencia === null ? (
-                "sin periodo anterior para comparar"
+                "sin semana anterior"
               ) : (
                 <span className={tendencia >= 0 ? "delta-sube" : "delta-baja"}>
-                  {tendencia >= 0 ? "▲" : "▼"} {Math.abs(tendencia)} % vs. 7 días previos
+                  {tendencia >= 0 ? "▲" : "▼"} {Math.abs(tendencia)} % vs. semana anterior
                 </span>
               )}
+            </span>
+          </div>
+
+          <div className="kpi">
+            <span className="kpi-label">Este mes{hoy ? ` (${etiquetaMes(hoy.slice(0, 7)).split(" ")[0]})` : ""}</span>
+            <span className="kpi-valor">{fmt(mesActual.detectado.sacos)}<span className="kpi-unidad">sacos</span></span>
+            <span className="kpi-sub">
+              {mesActual.detectado.sacos > 0
+                ? `${fmt(mesActual.porEstado.aprobado.sacos)} validados (${Math.round(porcentaje(mesActual.porEstado.aprobado.sacos, mesActual.detectado.sacos) ?? 0)} %)`
+                : "sin lotes este mes"}
             </span>
           </div>
 
@@ -523,8 +623,8 @@ export function Dashboard() {
             </span>
             <span className="kpi-sub">
               {confianzaMedia === null
-                ? "el detector aún no reporta confianza"
-                : `${confianzas.length} de ${conteosVista.length} registros la reportan`}
+                ? "el detector aún no la reporta"
+                : `en ${confianzas.length} lotes recientes`}
             </span>
           </div>
 
@@ -534,7 +634,17 @@ export function Dashboard() {
               {discrepanciasVista > 0 && <span className="estado-icono estado-critico" aria-hidden="true">⚠</span>}
               {discrepanciasVista}
             </span>
-            <span className="kpi-sub">de {conteosVista.length} registros recientes</span>
+            <span className="kpi-sub">IA vs. contratista</span>
+          </div>
+
+          <div className="kpi">
+            <span className="kpi-label">Pendientes de validar</span>
+            <span className="kpi-valor">{fmt(pendientesVista)}<span className="kpi-unidad">lotes</span></span>
+            <span className="kpi-sub">
+              {pendientesVista > 0
+                ? <button type="button" className="btn-link" onClick={() => { setFiltroValidacion("pendiente"); irA("historial"); }}>Revisar ahora</button>
+                : "todo revisado"}
+            </span>
           </div>
         </section>
         </div>
@@ -544,6 +654,8 @@ export function Dashboard() {
         <ProduccionValidada
           validacion={modoSimulado ? [] : resumen?.validacion ?? []}
           diarioPorEstado={modoSimulado ? [] : resumen?.diarioPorEstado ?? []}
+          mensualPorEstado={modoSimulado ? [] : resumen?.mensualPorEstado ?? []}
+          onVerLotesMes={verLotesDelMes}
           hoy={hoy}
           incluir={enVista}
           esVistaPrueba={vista !== "real"}
@@ -570,7 +682,7 @@ export function Dashboard() {
           <div className="tarjeta-head">
             <div>
               <h2>Producción diaria</h2>
-              <p className="tarjeta-sub">Sacos detectados por la IA cada día, según el estado de validación del lote · últimos {diasSerie} días · hora de Lima · {etiquetaVista.toLowerCase()}</p>
+              <p className="tarjeta-sub">Sacos por día según su validación · últimos {diasSerie} días · {etiquetaVista.toLowerCase()}</p>
             </div>
           </div>
           {dias.length > 0 ? <GraficoProduccion dias={dias} hoy={hoy} /> : <p className="vacio">Sin datos de producción.</p>}
@@ -584,7 +696,7 @@ export function Dashboard() {
             <div>
               <h2>Cámaras y fuentes de conteo</h2>
               <p className="tarjeta-sub">
-                El sistema de visión aún no envía señal de estado (en línea / fuera de línea). Se muestra el último conteo recibido de cada fuente.
+                Actividad de cada cámara o fuente según su último conteo recibido.
               </p>
             </div>
           </div>
@@ -594,13 +706,13 @@ export function Dashboard() {
             <ul className="fuentes">
               {fuentesVista.map((f) => (
                 <li key={`${f.fuenteCamara}-${f.esPrueba}`} className="fuente">
-                  <span className="estado-punto estado-desconocido" aria-hidden="true" />
+                  <span className={`estado-punto ${Date.now() - new Date(f.ultimoRegistro).getTime() < 24 * 3600_000 ? "estado-ok" : "estado-desconocido"}`} aria-hidden="true" />
                   <div className="fuente-info">
                     <span className="fuente-nombre">
                       {f.fuenteCamara ?? "Sin identificar"} {f.esPrueba && <EtiquetaPrueba />}
                     </span>
                     <span className="fuente-meta">
-                      Estado: sin telemetría · último conteo {tiempoRelativo(f.ultimoRegistro)} ({new Date(f.ultimoRegistro).toLocaleString("es-PE")}) · {f.registros} registro{f.registros !== 1 ? "s" : ""}
+                      {Date.now() - new Date(f.ultimoRegistro).getTime() < 24 * 3600_000 ? "Activa hoy" : "Sin conteos hoy"} · último conteo {tiempoRelativo(f.ultimoRegistro)} · {fmt(f.registros)} lote{f.registros !== 1 ? "s" : ""}
                     </span>
                   </div>
                 </li>
@@ -618,14 +730,17 @@ export function Dashboard() {
               <h2>Historial de conteos</h2>
               <p className="tarjeta-sub">
                 {conteosFiltrados.length} registro{conteosFiltrados.length !== 1 ? "s" : ""} · {fmt(totalFiltrado)} sacos
-                {hayFiltrosActivos ? " (con filtros)" : ""} · la tabla muestra los últimos {LIMITE_HISTORIAL}; el CSV incluye todo el historial
+                {hayFiltrosActivos ? " (con filtros)" : ""}
+                {hayPeriodo
+                  ? <> · {cargandoPeriodo ? "consultando el periodo…" : hayMasPeriodo ? `se muestran los ${LIMITE_HISTORIAL} más recientes; el CSV incluye todos` : "todos los lotes del periodo"}</>
+                  : <> · últimos {LIMITE_HISTORIAL} (elija un mes para ver periodos anteriores)</>}
                 {pendientesVista > 0 && <> · {pendientesVista} pendiente{pendientesVista !== 1 ? "s" : ""} de validación</>}
               </p>
             </div>
             <div className="acciones-exportar">
-            <BotonPdf seccionId="historial" titulo="Historial de conteos" archivo="historial-conteos" deshabilitado={conteosVista.length === 0}
+            <BotonPdf seccionId="historial" titulo="Historial de conteos" archivo="historial-conteos" deshabilitado={conteosHistorial.length === 0}
               indicadores={() => [
-                { etiqueta: "Lotes", valor: fmt(conteosFiltrados.length), detalle: hayFiltrosActivos ? "con los filtros activos" : "todo el historial" },
+                { etiqueta: "Lotes", valor: fmt(conteosFiltrados.length), detalle: mesFiltro ? etiquetaMes(mesFiltro) : hayFiltrosActivos ? "con los filtros activos" : "lotes recientes" },
                 { etiqueta: "Sacos detectados", valor: fmt(totalFiltrado), detalle: "conteo de la IA, sin modificar", destacado: true },
                 { etiqueta: "Promedio por lote", valor: conteosFiltrados.length ? fmt(Math.round(totalFiltrado / conteosFiltrados.length)) : "—", detalle: "sacos" },
                 { etiqueta: "Pendientes de validar", valor: fmt(pendientesVista), detalle: "lotes sin revisar" },
@@ -633,7 +748,7 @@ export function Dashboard() {
             <button
               onClick={exportarCSV}
               className="btn-acento"
-              disabled={conteosVista.length === 0 || exportando}
+              disabled={conteosHistorial.length === 0 || exportando}
               title="Exporta todo el historial con los filtros activos (fechas en hora de Lima)"
             >
               {exportando ? "Exportando…" : "Exportar CSV"}
@@ -651,6 +766,13 @@ export function Dashboard() {
               className="filtro-input"
               aria-label="Buscar por cámara u origen"
             />
+            <label className="filtro-fecha">
+              Mes
+              <select value={mesFiltro} onChange={(e) => elegirMes(e.target.value)}>
+                <option value="">{hayPeriodo && !mesFiltro ? "Fechas personalizadas" : "Todos (recientes)"}</option>
+                {mesesHistorial.map((m) => <option key={m} value={m}>{etiquetaMes(m)}</option>)}
+              </select>
+            </label>
             <label className="filtro-fecha">
               Desde
               <input type="date" value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)} />
@@ -775,7 +897,11 @@ export function Dashboard() {
                 {conteosFiltrados.length === 0 && (
                   <tr className="fila-vacia">
                     <td colSpan={7}>
-                      {conteosVista.length === 0
+                      {cargandoPeriodo && conteosPeriodo === null
+                        ? "Consultando el periodo…"
+                        : conteosHistorial.length === 0 && hayPeriodo
+                        ? "No hay lotes en este periodo."
+                        : conteosVista.length === 0
                         ? vista === "real" ? "Todavía no hay conteos reales registrados." : "No hay conteos en esta vista."
                         : "Ningún registro coincide con los filtros aplicados."}
                     </td>
@@ -805,7 +931,7 @@ export function Dashboard() {
             </div>
             {/* Estado de WhatsApp (etapa 5): solo indicadores, sin token, números ni URL. */}
             <div hidden={oculto("whatsapp")}>
-            <EstadoWhatsapp recarga={actualizadoEn} />
+            <EstadoWhatsapp recarga={actualizadoEn} onRegistrado={cargar} />
             </div>
             {/* Contar por foto: muestra el resultado y, si el personal lo decide, lo registra como lote pendiente. */}
             <div hidden={oculto("foto")}>
